@@ -4,6 +4,7 @@
 # Xcode user-specific files
 xcuserdata/
 *.xcuserstate
+*.xcworkspace/xcuserdata/
 
 # Build artifacts
 DerivedData/
