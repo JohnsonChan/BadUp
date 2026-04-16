@@ -34,3 +34,4 @@ Carthage/Build/
 # Local environment files
 .env
 .env.*
+BadUp/BadUp.xcodeproj/project.xcworkspace/xcuserdata/chenrs.xcuserdatad/UserInterfaceState.xcuserstate
