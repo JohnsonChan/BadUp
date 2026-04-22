@@ -1,4 +1,6 @@
 <?php
+// 首页今日统计接口。
+// 返回用户可见的行为项列表，并附带指定日期的统计次数。
 require_once "bad_Common.php";
 require_once "bad_Database.php";
 
@@ -9,6 +11,7 @@ $recordDate = !empty($data['recordDate']) ? trim($data['recordDate']) : date('Y-
 try {
     $pdo = Database::getPdoInstance();
 
+    // LEFT JOIN 保证即使今天没有记录，行为项也会返回，todayCount 为 0。
     $sql = "
         SELECT b.behaviorId, b.userId, b.behaviorName, b.behaviorDesc, b.colorHex, b.sortOrder, b.isActive,
                IFNULL(SUM(r.countNum), 0) AS todayCount
@@ -19,6 +22,7 @@ try {
     ";
 
     if ($userId) {
+        // 登录用户可以看到系统默认行为和自己创建的行为。
         $sql .= " WHERE b.isActive = 1 AND (b.userId IS NULL OR b.userId = :userId)";
     } else {
         $sql .= " WHERE b.isActive = 1 AND b.userId IS NULL";

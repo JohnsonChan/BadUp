@@ -11,10 +11,12 @@ import SwiftUI
 // App 入口。
 // 程序启动后会从这里创建主窗口，并把 `ContentView` 作为首页显示出来。
 struct BadUpApp: App {
+    @StateObject private var session = SessionStore()
+
     var body: some Scene {
         WindowGroup {
-            // 主界面。
-            ContentView()
+            RootView()
+                .environmentObject(session)
         }
     }
 }

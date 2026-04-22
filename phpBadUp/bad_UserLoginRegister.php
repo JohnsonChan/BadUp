@@ -1,4 +1,6 @@
 <?php
+// 用户自动登录/注册接口。
+// iOS 启动页会把 Keychain 里的 deviceId 发过来；服务端按 deviceId 找用户，找不到就创建。
 require_once "bad_Common.php";
 require_once "bad_Database.php";
 
@@ -8,9 +10,47 @@ if (empty($data['deviceId']) && empty($data['phone']) && empty($data['userCode']
     badResponse(400, 'NoLoginKey');
 }
 
+// 确保新用户或旧空用户有默认行为项。
+// 只在该 userId 没有任何行为项时初始化，避免用户删除后下次登录又被自动恢复。
+function badEnsureDefaultBehaviors($pdo, $userId) {
+    $count = $pdo->prepare("SELECT COUNT(*) FROM bad_Behavior WHERE userId = :userId");
+    $count->execute([':userId' => $userId]);
+    if (intval($count->fetchColumn()) > 0) {
+        return;
+    }
+
+    $createdAt = date('Y-m-d H:i:s');
+    $defaults = [
+        ['撸管', '记录一次没忍住', '#F55F52', 10],
+        ['刷视频', '记录一次沉迷短视频', '#31B3C5', 20],
+        ['熬夜', '记录一次睡太晚', '#6C7EF7', 30],
+        ['吃太饱', '记录一次吃撑了', '#F9B536', 40]
+    ];
+
+    $insert = $pdo->prepare("
+        INSERT INTO bad_Behavior
+        (userId, behaviorName, behaviorDesc, colorHex, sortOrder, isActive, createdAt)
+        VALUES
+        (:userId, :behaviorName, :behaviorDesc, :colorHex, :sortOrder, 1, :createdAt)
+    ");
+
+    foreach ($defaults as $item) {
+        $insert->execute([
+            ':userId' => $userId,
+            ':behaviorName' => $item[0],
+            ':behaviorDesc' => $item[1],
+            ':colorHex' => $item[2],
+            ':sortOrder' => $item[3],
+            ':createdAt' => $createdAt
+        ]);
+    }
+}
+
 try {
     $pdo = Database::getPdoInstance();
 
+    // 允许用 deviceId、phone、userCode 三种方式匹配已有用户。
+    // 当前 iOS 端只传 deviceId，其它字段预留给后续账号体系。
     $conditions = [];
     $params = [];
 
@@ -33,6 +73,7 @@ try {
     $user = $stmt->fetch();
 
     if ($user) {
+        // 老用户登录时刷新最近登录信息。
         $update = $pdo->prepare("
             UPDATE bad_User
             SET ip = :ip,
@@ -50,10 +91,12 @@ try {
 
         $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
         $stmt->execute([':userId' => $user['userId']]);
+        badEnsureDefaultBehaviors($pdo, $user['userId']);
         badResponse(200, 'logOk', ['data' => $stmt->fetch()]);
     }
 
     $createdAt = date('Y-m-d H:i:s');
+    // 没找到用户时自动注册。
     $insert = $pdo->prepare("
         INSERT INTO bad_User
         (userCode, userName, phone, email, password, avatar, deviceId, platform, appVersion, systemVersion, ip, status, createdAt)
@@ -79,6 +122,7 @@ try {
     ]);
 
     $userId = $pdo->lastInsertId();
+    badEnsureDefaultBehaviors($pdo, $userId);
     $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
     $stmt->execute([':userId' => $userId]);
     badResponse(200, 'regOk', ['data' => $stmt->fetch()]);

@@ -91,6 +91,7 @@ private extension Array where Element == ColorPaletteItem {
 // 默认行为和用户新增行为都统一走这个结构。
 private struct BehaviorItem: Identifiable, Hashable {
     let id: Int64
+    let userId: Int?
     let name: String
     let detail: String
     let colorHex: String
@@ -100,6 +101,16 @@ private struct BehaviorItem: Identifiable, Hashable {
             return paletteItem.color
         }
         return BehaviorColorOption.from(hex: colorHex).color
+    }
+}
+
+private extension BehaviorItem {
+    init(serverBehaviorId: Int64, userId: Int?, behaviorName: String, behaviorDesc: String?, colorHex: String) {
+        self.id = serverBehaviorId
+        self.userId = userId
+        self.name = behaviorName
+        self.detail = behaviorDesc ?? ""
+        self.colorHex = colorHex
     }
 }
 
@@ -202,7 +213,7 @@ private final class BehaviorDatabase {
             let name = String(cString: sqlite3_column_text(statement, 1))
             let detail = sqlite3_column_text(statement, 2).map { String(cString: $0) } ?? ""
             let colorHex = sqlite3_column_text(statement, 3).map { String(cString: $0) } ?? BehaviorColorOption.coral.rawValue
-            items.append(BehaviorItem(id: id, name: name, detail: detail, colorHex: colorHex))
+            items.append(BehaviorItem(id: id, userId: nil, name: name, detail: detail, colorHex: colorHex))
         }
 
         return items
@@ -228,6 +239,62 @@ private final class BehaviorDatabase {
         sqlite3_bind_text(statement, 3, (colorHex as NSString).utf8String, -1, nil)
 
         return sqlite3_step(statement) == SQLITE_DONE
+    }
+
+    // 更新行为项。
+    // 因为本地记录表当前用行为名称做关联，所以改名时要同步更新历史记录里的 behavior_type。
+    func updateBehavior(id: Int64, name: String, detail: String, colorHex: String) -> Bool {
+        guard let oldBehavior = fetchBehaviors().first(where: { $0.id == id }) else {
+            return false
+        }
+
+        guard sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil) == SQLITE_OK else {
+            return false
+        }
+
+        let updateBehaviorSQL = """
+        UPDATE behaviors
+        SET name = ?, detail = ?, color_hex = ?
+        WHERE id = ?;
+        """
+        var updateBehaviorStatement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, updateBehaviorSQL, -1, &updateBehaviorStatement, nil) == SQLITE_OK else {
+            sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+            return false
+        }
+
+        sqlite3_bind_text(updateBehaviorStatement, 1, (name as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(updateBehaviorStatement, 2, (detail as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(updateBehaviorStatement, 3, (colorHex as NSString).utf8String, -1, nil)
+        sqlite3_bind_int64(updateBehaviorStatement, 4, id)
+        let behaviorUpdated = sqlite3_step(updateBehaviorStatement) == SQLITE_DONE
+        sqlite3_finalize(updateBehaviorStatement)
+
+        guard behaviorUpdated else {
+            sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+            return false
+        }
+
+        if oldBehavior.name != name {
+            let updateRecordsSQL = "UPDATE behavior_records SET behavior_type = ? WHERE behavior_type = ?;"
+            var updateRecordsStatement: OpaquePointer?
+            guard sqlite3_prepare_v2(db, updateRecordsSQL, -1, &updateRecordsStatement, nil) == SQLITE_OK else {
+                sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                return false
+            }
+
+            sqlite3_bind_text(updateRecordsStatement, 1, (name as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(updateRecordsStatement, 2, (oldBehavior.name as NSString).utf8String, -1, nil)
+            let recordsUpdated = sqlite3_step(updateRecordsStatement) == SQLITE_DONE
+            sqlite3_finalize(updateRecordsStatement)
+
+            guard recordsUpdated else {
+                sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
+                return false
+            }
+        }
+
+        return sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK
     }
 
     // 删除行为项，同时把它的历史记录一并删除。
@@ -505,31 +572,318 @@ private final class BehaviorDatabase {
     }
 }
 
+// 服务器行为接口封装。
+// 页面层只和这个服务交互，不直接拼 PHP 接口参数。
+private final class RemoteBehaviorService {
+    static let shared = RemoteBehaviorService()
+
+    private let session: URLSession
+    private let decoder = JSONDecoder()
+
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private let dateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    private init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 15
+        config.timeoutIntervalForResource = 30
+        session = URLSession(configuration: config)
+    }
+
+    func fetchTodayCounts(userId: Int, date: Date = Date()) async throws -> [DailyBehaviorCount] {
+        let response: ServerListResponse<ServerBehaviorToday> = try await post(
+            "bad_BehaviorTodayCount.php",
+            payload: [
+                "userId": userId,
+                "recordDate": dateFormatter.string(from: date)
+            ]
+        )
+
+        return (response.list ?? []).map { item in
+            DailyBehaviorCount(
+                behavior: item.behaviorItem,
+                count: item.todayCount.intValue
+            )
+        }
+    }
+
+    func addBehavior(userId: Int, name: String, detail: String, colorHex: String) async throws {
+        let _: ServerDataResponse<ServerBehavior> = try await post(
+            "bad_BehaviorInsert.php",
+            payload: [
+                "userId": userId,
+                "behaviorName": name,
+                "behaviorDesc": detail,
+                "colorHex": colorHex
+            ]
+        )
+    }
+
+    func updateBehavior(userId: Int, behavior: BehaviorItem, name: String, detail: String, colorHex: String) async throws {
+        let _: ServerDataResponse<ServerBehavior> = try await post(
+            "bad_BehaviorUpdate.php",
+            payload: [
+                "userId": userId,
+                "behaviorId": behavior.id,
+                "behaviorName": name,
+                "behaviorDesc": detail,
+                "colorHex": colorHex
+            ]
+        )
+    }
+
+    func deleteBehavior(userId: Int, behavior: BehaviorItem) async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_BehaviorDelete.php",
+            payload: [
+                "userId": userId,
+                "behaviorId": behavior.id
+            ]
+        )
+    }
+
+    func insertRecord(userId: Int, behavior: BehaviorItem, date: Date = Date()) async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_BehaviorRecordInsert.php",
+            payload: [
+                "userId": userId,
+                "behaviorId": behavior.id,
+                "recordDate": dateFormatter.string(from: date),
+                "recordedAt": dateTimeFormatter.string(from: date),
+                "countNum": 1,
+                "clientUid": UUID().uuidString
+            ]
+        )
+    }
+
+    func fetchMonthSummaries(behavior: BehaviorItem, year: Int) async throws -> [MonthSummary] {
+        let response: ServerListResponse<ServerMonthSummary> = try await post(
+            "bad_BehaviorYearStats.php",
+            payload: [
+                "behaviorId": behavior.id,
+                "year": year
+            ]
+        )
+        var counts = Dictionary(uniqueKeysWithValues: (1...12).map { ($0, 0) })
+        for item in response.list ?? [] {
+            counts[item.monthNum.intValue] = item.totalCount.intValue
+        }
+        return (1...12).map { MonthSummary(month: $0, count: counts[$0, default: 0]) }
+    }
+
+    func fetchDaySummaries(behavior: BehaviorItem, year: Int, month: Int) async throws -> [DaySummary] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.locale = Locale(identifier: "zh_CN")
+        calendar.timeZone = .current
+
+        guard
+            let monthStart = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
+            let dayRange = calendar.range(of: .day, in: .month, for: monthStart)
+        else {
+            return []
+        }
+
+        let response: ServerListResponse<ServerDaySummary> = try await post(
+            "bad_BehaviorMonthStats.php",
+            payload: [
+                "behaviorId": behavior.id,
+                "year": year,
+                "month": month
+            ]
+        )
+        var counts = Dictionary(uniqueKeysWithValues: dayRange.map { ($0, 0) })
+        for item in response.list ?? [] {
+            counts[item.dayNum.intValue] = item.totalCount.intValue
+        }
+
+        return dayRange.compactMap { day in
+            calendar.date(from: DateComponents(year: year, month: month, day: day)).map {
+                DaySummary(date: $0, day: day, count: counts[day, default: 0])
+            }
+        }
+    }
+
+    func fetchHourSummaries(behavior: BehaviorItem, date: Date) async throws -> [HourSummary] {
+        let response: ServerListResponse<ServerHourSummary> = try await post(
+            "bad_BehaviorDayStats.php",
+            payload: [
+                "behaviorId": behavior.id,
+                "recordDate": dateFormatter.string(from: date)
+            ]
+        )
+        var counts = Dictionary(uniqueKeysWithValues: (0...23).map { ($0, 0) })
+        for item in response.list ?? [] {
+            counts[item.hourNum.intValue] = item.totalCount.intValue
+        }
+        return (0...23).map { HourSummary(hour: $0, count: counts[$0, default: 0]) }
+    }
+
+    private func post<T: Decodable>(_ endpoint: String, payload: [String: Any]) async throws -> T {
+        let url = BadUpAPI.baseURL.appendingPathComponent(endpoint)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIClientError.invalidResponse("不是 HTTP 响应")
+        }
+        let responseText = String(data: data, encoding: .utf8) ?? "<non-utf8>"
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw APIClientError.invalidResponse("HTTP \(httpResponse.statusCode)，\(responseText)")
+        }
+        let decoded = try decoder.decode(T.self, from: data)
+
+        if let apiResponse = decoded as? ServerResponseChecking, apiResponse.code != 200 {
+            throw APIClientError.server(code: apiResponse.code, msg: apiResponse.msg)
+        }
+
+        return decoded
+    }
+}
+
+private protocol ServerResponseChecking {
+    var code: Int { get }
+    var msg: String { get }
+}
+
+private struct ServerListResponse<T: Decodable>: Decodable, ServerResponseChecking {
+    let code: Int
+    let msg: String
+    let list: [T]?
+}
+
+private struct ServerDataResponse<T: Decodable>: Decodable, ServerResponseChecking {
+    let code: Int
+    let msg: String
+    let data: T?
+}
+
+private struct EmptyServerResponse: Decodable, ServerResponseChecking {
+    let code: Int
+    let msg: String
+}
+
+private struct LossyInt: Decodable {
+    let intValue: Int
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let intValue = try? container.decode(Int.self) {
+            self.intValue = intValue
+            return
+        }
+        if let stringValue = try? container.decode(String.self), let intValue = Int(stringValue) {
+            self.intValue = intValue
+            return
+        }
+        self.intValue = 0
+    }
+}
+
+private struct ServerBehavior: Decodable {
+    let behaviorId: LossyInt
+    let userId: LossyInt?
+    let behaviorName: String
+    let behaviorDesc: String?
+    let colorHex: String
+
+    var behaviorItem: BehaviorItem {
+        BehaviorItem(
+            serverBehaviorId: Int64(behaviorId.intValue),
+            userId: userId?.intValue,
+            behaviorName: behaviorName,
+            behaviorDesc: behaviorDesc,
+            colorHex: colorHex
+        )
+    }
+}
+
+private struct ServerBehaviorToday: Decodable {
+    let behaviorId: LossyInt
+    let userId: LossyInt?
+    let behaviorName: String
+    let behaviorDesc: String?
+    let colorHex: String
+    let todayCount: LossyInt
+
+    var behaviorItem: BehaviorItem {
+        BehaviorItem(
+            serverBehaviorId: Int64(behaviorId.intValue),
+            userId: userId?.intValue,
+            behaviorName: behaviorName,
+            behaviorDesc: behaviorDesc,
+            colorHex: colorHex
+        )
+    }
+}
+
+private struct ServerMonthSummary: Decodable {
+    let monthNum: LossyInt
+    let totalCount: LossyInt
+}
+
+private struct ServerDaySummary: Decodable {
+    let dayNum: LossyInt
+    let totalCount: LossyInt
+}
+
+private struct ServerHourSummary: Decodable {
+    let hourNum: LossyInt
+    let totalCount: LossyInt
+}
+
 @MainActor
 // 首页视图模型：负责行为列表和今天统计。
 private final class ContentViewModel: ObservableObject {
     @Published var behaviors: [BehaviorItem] = []
     @Published var todayCounts: [DailyBehaviorCount] = []
     @Published var addBehaviorErrorMessage: String?
+    @Published var isLoading = false
 
-    private let database = BehaviorDatabase()
+    private let remoteService = RemoteBehaviorService.shared
 
-    init() {
-        loadAll()
+    func loadAll(userId: Int) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let counts = try await remoteService.fetchTodayCounts(userId: userId)
+            todayCounts = counts
+            behaviors = counts.map(\.behavior)
+            addBehaviorErrorMessage = nil
+        } catch {
+            addBehaviorErrorMessage = readableMessage(prefix: "加载失败", error: error)
+        }
     }
 
-    func loadAll() {
-        let items = database.fetchBehaviors()
-        behaviors = items
-        todayCounts = database.fetchTodayCounts(for: items)
+    func record(_ behavior: BehaviorItem, userId: Int) async {
+        do {
+            try await remoteService.insertRecord(userId: userId, behavior: behavior)
+            await loadAll(userId: userId)
+        } catch {
+            addBehaviorErrorMessage = readableMessage(prefix: "记录失败", error: error)
+        }
     }
 
-    func record(_ behavior: BehaviorItem) {
-        database.insertRecord(for: behavior)
-        loadAll()
-    }
-
-    func addBehavior(name: String, detail: String, colorHex: String) -> Bool {
+    func addBehavior(userId: Int, name: String, detail: String, colorHex: String) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -543,23 +897,67 @@ private final class ContentViewModel: ObservableObject {
             return false
         }
 
-        let success = database.addBehavior(name: trimmedName, detail: trimmedDetail, colorHex: colorHex)
-        if success {
+        do {
+            try await remoteService.addBehavior(
+                userId: userId,
+                name: trimmedName,
+                detail: trimmedDetail,
+                colorHex: colorHex
+            )
             addBehaviorErrorMessage = nil
-            loadAll()
-        } else {
-            addBehaviorErrorMessage = "保存失败，请重试"
+            await loadAll(userId: userId)
+            return true
+        } catch {
+            addBehaviorErrorMessage = readableMessage(prefix: "保存失败", error: error)
+            return false
         }
-        return success
     }
 
-    func deleteBehavior(_ behavior: BehaviorItem) {
-        let success = database.deleteBehavior(id: behavior.id)
-        if success {
-            loadAll()
-        } else {
-            addBehaviorErrorMessage = "删除失败，请重试"
+    func updateBehavior(_ behavior: BehaviorItem, userId: Int, name: String, detail: String, colorHex: String) async -> Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedName.isEmpty else {
+            addBehaviorErrorMessage = "行为名称不能为空"
+            return false
         }
+
+        if behaviors.contains(where: { $0.id != behavior.id && $0.name == trimmedName }) {
+            addBehaviorErrorMessage = "已经存在同名行为，请换一个名称"
+            return false
+        }
+
+        do {
+            try await remoteService.updateBehavior(
+                userId: userId,
+                behavior: behavior,
+                name: trimmedName,
+                detail: trimmedDetail,
+                colorHex: colorHex
+            )
+            addBehaviorErrorMessage = nil
+            await loadAll(userId: userId)
+            return true
+        } catch {
+            addBehaviorErrorMessage = readableMessage(prefix: "保存失败", error: error)
+            return false
+        }
+    }
+
+    func deleteBehavior(_ behavior: BehaviorItem, userId: Int) async {
+        do {
+            try await remoteService.deleteBehavior(userId: userId, behavior: behavior)
+            await loadAll(userId: userId)
+        } catch {
+            addBehaviorErrorMessage = readableMessage(prefix: "删除失败", error: error)
+        }
+    }
+
+    private func readableMessage(prefix: String, error: Error) -> String {
+        if let apiError = error as? APIClientError {
+            return "\(prefix)：\(apiError.localizedDescription)"
+        }
+        return "\(prefix)：\(error.localizedDescription)"
     }
 }
 
@@ -568,19 +966,22 @@ private final class BehaviorYearViewModel: ObservableObject {
     @Published var monthSummaries: [MonthSummary] = []
 
     private let behavior: BehaviorItem
-    private let database = BehaviorDatabase()
+    private let remoteService = RemoteBehaviorService.shared
 
-    init(behavior: BehaviorItem, year: Int) {
+    init(behavior: BehaviorItem) {
         self.behavior = behavior
-        load(year: year)
     }
 
     var totalCount: Int {
         monthSummaries.reduce(0) { $0 + $1.count }
     }
 
-    func load(year: Int) {
-        monthSummaries = database.fetchMonthSummaries(for: behavior, year: year)
+    func load(year: Int) async {
+        do {
+            monthSummaries = try await remoteService.fetchMonthSummaries(behavior: behavior, year: year)
+        } catch {
+            monthSummaries = (1...12).map { MonthSummary(month: $0, count: 0) }
+        }
     }
 }
 
@@ -589,19 +990,22 @@ private final class BehaviorMonthViewModel: ObservableObject {
     @Published var daySummaries: [DaySummary] = []
 
     private let behavior: BehaviorItem
-    private let database = BehaviorDatabase()
+    private let remoteService = RemoteBehaviorService.shared
 
-    init(behavior: BehaviorItem, year: Int, month: Int) {
+    init(behavior: BehaviorItem) {
         self.behavior = behavior
-        load(year: year, month: month)
     }
 
     var totalCount: Int {
         daySummaries.reduce(0) { $0 + $1.count }
     }
 
-    func load(year: Int, month: Int) {
-        daySummaries = database.fetchDaySummaries(for: behavior, year: year, month: month)
+    func load(year: Int, month: Int) async {
+        do {
+            daySummaries = try await remoteService.fetchDaySummaries(behavior: behavior, year: year, month: month)
+        } catch {
+            daySummaries = []
+        }
     }
 }
 
@@ -610,28 +1014,38 @@ private final class BehaviorDayViewModel: ObservableObject {
     @Published var hourSummaries: [HourSummary] = []
 
     private let behavior: BehaviorItem
-    private let database = BehaviorDatabase()
+    private let remoteService = RemoteBehaviorService.shared
 
-    init(behavior: BehaviorItem, date: Date) {
+    init(behavior: BehaviorItem) {
         self.behavior = behavior
-        load(date: date)
     }
 
     var totalCount: Int {
         hourSummaries.reduce(0) { $0 + $1.count }
     }
 
-    func load(date: Date) {
-        hourSummaries = database.fetchHourSummaries(for: behavior, date: date)
+    func load(date: Date) async {
+        do {
+            hourSummaries = try await remoteService.fetchHourSummaries(behavior: behavior, date: date)
+        } catch {
+            hourSummaries = (0...23).map { HourSummary(hour: $0, count: 0) }
+        }
     }
 }
 
 // 主页面。
 struct ContentView: View {
+    @EnvironmentObject private var session: SessionStore
+
     @StateObject private var viewModel = ContentViewModel()
     @State private var pendingBehavior: BehaviorItem?
     @State private var isPresentingAddBehavior = false
     @State private var behaviorPendingDeletion: BehaviorItem?
+    @State private var behaviorPendingEditing: BehaviorItem?
+
+    private var currentUserId: Int? {
+        session.user?.userId
+    }
 
     private let dateText: String = {
         let formatter = DateFormatter()
@@ -643,153 +1057,468 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    VStack(spacing: 8) {
-                        Text("今日行为记录")
-                            .font(.largeTitle.bold())
-                        Text(dateText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    VStack(spacing: 12) {
-                        ForEach(viewModel.behaviors) { behavior in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(behavior.name)
-                                    .font(.title3.weight(.semibold))
-                                    .foregroundStyle(.white)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                                if !behavior.detail.isEmpty {
-                                    Text(behavior.detail)
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.82))
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                            .padding()
-                            .background(behavior.tintColor.gradient)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .onTapGesture {
-                                pendingBehavior = behavior
-                            }
-                            .onLongPressGesture {
-                                pendingBehavior = nil
-                                isPresentingAddBehavior = false
-                                if behaviorPendingDeletion == nil {
-                                    behaviorPendingDeletion = behavior
-                                }
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("今天统计")
-                            .font(.headline)
-
-                        ForEach(viewModel.todayCounts) { item in
-                            NavigationLink {
-                                BehaviorYearDetailView(behavior: item.behavior)
-                            } label: {
-                                HStack(spacing: 14) {
-                                    Circle()
-                                        .fill(item.behavior.tintColor)
-                                        .frame(width: 12, height: 12)
-
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.behavior.name)
-                                            .foregroundStyle(.primary)
-
-                                        if !item.behavior.detail.isEmpty {
-                                            Text(item.behavior.detail)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-
-                                    Spacer()
-
-                                    Text("\(item.count) 次")
-                                        .fontWeight(.semibold)
-                                        .foregroundStyle(.primary)
-
-                                    Image(systemName: "chevron.right")
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(.secondary)
-                                }
-                                .padding()
-                                .background(Color.gray.opacity(0.12))
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-                .padding()
-            }
+            HomeContentView(
+                dateText: dateText,
+                behaviors: viewModel.behaviors,
+                todayCounts: viewModel.todayCounts,
+                onBehaviorTap: beginRecord,
+                onBehaviorLongPress: beginBehaviorAction
+            )
             .navigationTitle("坏是做尽")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        isPresentingAddBehavior = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+            .toolbar { toolbarContent }
+            .task(id: currentUserId) {
+                if let currentUserId {
+                    await viewModel.loadAll(userId: currentUserId)
                 }
             }
-            .onAppear {
-                viewModel.loadAll()
+            .modifier(homePresentationModifier)
+        }
+        // 强制根视图撑满屏幕，并把背景铺到安全区外，避免出现“圆角白卡+黑边”的观感。
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.white.opacity(0.001))
+        .ignoresSafeArea()
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Button {
+                isPresentingAddBehavior = true
+            } label: {
+                Image(systemName: "plus")
             }
+        }
+
+        ToolbarItem(placement: .topBarTrailing) {
+            NavigationLink {
+                MoreView(user: session.user)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .rotationEffect(.degrees(90))
+            }
+        }
+    }
+
+    private var homePresentationModifier: HomePresentationModifier {
+        HomePresentationModifier(
+            viewModel: viewModel,
+            userId: currentUserId,
+            isPresentingAddBehavior: $isPresentingAddBehavior,
+            behaviorPendingEditing: $behaviorPendingEditing,
+            pendingBehavior: $pendingBehavior,
+            behaviorPendingDeletion: $behaviorPendingDeletion
+        )
+    }
+
+    private func beginRecord(_ behavior: BehaviorItem) {
+        pendingBehavior = behavior
+    }
+
+    private func beginBehaviorAction(_ behavior: BehaviorItem) {
+        pendingBehavior = nil
+        isPresentingAddBehavior = false
+        if behaviorPendingDeletion == nil {
+            behaviorPendingDeletion = behavior
+        }
+    }
+}
+
+// 首页主体滚动内容。
+private struct HomeContentView: View {
+    let dateText: String
+    let behaviors: [BehaviorItem]
+    let todayCounts: [DailyBehaviorCount]
+    let onBehaviorTap: (BehaviorItem) -> Void
+    let onBehaviorLongPress: (BehaviorItem) -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 24) {
+                HomeHeaderView(dateText: dateText)
+                behaviorButtonList
+                todayCountList
+            }
+            // 关键：让 ScrollView 内容强制占满宽度，避免在真机上被居中成“卡片”。
+            .frame(maxWidth: .infinity, alignment: .top)
+        }
+        // 让内容更接近全屏：用 ScrollView 的内容边距替代整块 padding，
+        // 同时给背景铺满整个屏幕（包含安全区外的区域）。
+        .contentMargins(.horizontal, 16, for: .scrollContent)
+        .contentMargins(.vertical, 12, for: .scrollContent)
+    }
+
+    private var behaviorButtonList: some View {
+        VStack(spacing: 12) {
+            ForEach(behaviors) { behavior in
+                BehaviorButtonRow(behavior: behavior) {
+                    onBehaviorTap(behavior)
+                } onLongPress: {
+                    onBehaviorLongPress(behavior)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var todayCountList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("今天统计")
+                .font(.headline)
+
+            ForEach(todayCounts) { item in
+                NavigationLink {
+                    BehaviorYearDetailView(behavior: item.behavior)
+                } label: {
+                    TodayCountRow(item: item)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// 首页弹窗和 sheet 集中放在这里，避免 ContentView.body 过大导致编译器类型推断超时。
+private struct HomePresentationModifier: ViewModifier {
+    @ObservedObject var viewModel: ContentViewModel
+    let userId: Int?
+
+    @Binding var isPresentingAddBehavior: Bool
+    @Binding var behaviorPendingEditing: BehaviorItem?
+    @Binding var pendingBehavior: BehaviorItem?
+    @Binding var behaviorPendingDeletion: BehaviorItem?
+
+    func body(content: Content) -> some View {
+        content
             .sheet(isPresented: $isPresentingAddBehavior) {
-                AddBehaviorView(viewModel: viewModel)
+                AddBehaviorView(viewModel: viewModel, userId: userId)
             }
-            .alert(
-                "确认记录",
-                isPresented: Binding(
-                    get: { pendingBehavior != nil },
-                    set: { isPresented in
-                        if !isPresented {
+            .sheet(item: $behaviorPendingEditing) { behavior in
+                AddBehaviorView(viewModel: viewModel, userId: userId, editingBehavior: behavior)
+            }
+            .overlay {
+                if let behavior = pendingBehavior {
+                    BadUpDialog(
+                        tintColor: behavior.tintColor,
+                        title: "确认记录",
+                        messagePrefix: "确定要记录一次",
+                        highlightedText: behavior.name,
+                        messageSuffix: "吗？",
+                        primaryTitle: "确认记录",
+                        secondaryTitle: "取消",
+                        primaryRole: nil,
+                        primaryAction: {
+                            confirmRecord(behavior)
+                        },
+                        secondaryAction: {
                             pendingBehavior = nil
                         }
-                    }
-                ),
-                presenting: pendingBehavior
-            ) { behavior in
-                Button("取消", role: .cancel) {
-                    pendingBehavior = nil
-                }
-                Button("确认") {
-                    viewModel.record(behavior)
-                    pendingBehavior = nil
-                }
-            } message: { behavior in
-                Text("确定要记录一次\(behavior.name)吗？")
-            }
-            .alert(
-                "删除行为项",
-                isPresented: Binding(
-                    get: { behaviorPendingDeletion != nil },
-                    set: { isPresented in
-                        if !isPresented {
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                } else if let behavior = behaviorPendingDeletion {
+                    BadUpDialog(
+                        tintColor: behavior.tintColor,
+                        title: "管理行为项",
+                        messagePrefix: "你要编辑还是删除",
+                        highlightedText: behavior.name,
+                        messageSuffix: "？删除会连历史记录一起删除。",
+                        primaryTitle: "进入编辑",
+                        secondaryTitle: "删除",
+                        primaryRole: nil,
+                        secondaryRole: .destructive,
+                        primaryAction: {
+                            behaviorPendingEditing = behavior
                             behaviorPendingDeletion = nil
+                        },
+                        secondaryAction: {
+                            confirmDelete(behavior)
                         }
-                    }
-                ),
-                presenting: behaviorPendingDeletion
-            ) { behavior in
-                Button("取消", role: .cancel) {
-                    behaviorPendingDeletion = nil
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
-                Button("删除", role: .destructive) {
-                    viewModel.deleteBehavior(behavior)
-                    behaviorPendingDeletion = nil
-                }
-            } message: { behavior in
-                Text("确定要删除“\(behavior.name)”吗？这个行为项以及它的历史记录都会一起删除。")
             }
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: pendingBehavior)
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: behaviorPendingDeletion)
+    }
+
+    private func confirmRecord(_ behavior: BehaviorItem) {
+        if let userId {
+            Task {
+                await viewModel.record(behavior, userId: userId)
+            }
+        }
+        pendingBehavior = nil
+    }
+
+    private func confirmDelete(_ behavior: BehaviorItem) {
+        if let userId {
+            Task {
+                await viewModel.deleteBehavior(behavior, userId: userId)
+            }
+        }
+        behaviorPendingDeletion = nil
+    }
+}
+
+// App 内自定义确认弹窗。
+// 比系统 Alert 更柔和，也可以使用行为颜色做视觉关联。
+private struct BadUpDialog: View {
+    let tintColor: Color
+    let title: String
+    let messagePrefix: String
+    let highlightedText: String
+    let messageSuffix: String
+    let primaryTitle: String
+    let secondaryTitle: String
+    let primaryRole: ButtonRole?
+    let secondaryRole: ButtonRole?
+    let primaryAction: () -> Void
+    let secondaryAction: () -> Void
+
+    init(
+        tintColor: Color,
+        title: String,
+        messagePrefix: String,
+        highlightedText: String,
+        messageSuffix: String,
+        primaryTitle: String,
+        secondaryTitle: String,
+        primaryRole: ButtonRole? = nil,
+        secondaryRole: ButtonRole? = nil,
+        primaryAction: @escaping () -> Void,
+        secondaryAction: @escaping () -> Void
+    ) {
+        self.tintColor = tintColor
+        self.title = title
+        self.messagePrefix = messagePrefix
+        self.highlightedText = highlightedText
+        self.messageSuffix = messageSuffix
+        self.primaryTitle = primaryTitle
+        self.secondaryTitle = secondaryTitle
+        self.primaryRole = primaryRole
+        self.secondaryRole = secondaryRole
+        self.primaryAction = primaryAction
+        self.secondaryAction = secondaryAction
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.26)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Capsule()
+                    .fill(tintColor.opacity(0.88))
+                    .frame(width: 46, height: 5)
+
+                VStack(spacing: 8) {
+                    Text(title)
+                        .font(.title3.weight(.heavy))
+                        .foregroundStyle(.primary)
+
+                    highlightedMessage
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                }
+
+                HStack(spacing: 12) {
+                    Button(role: secondaryRole, action: secondaryAction) {
+                        Text(secondaryTitle)
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(secondaryRole == .destructive ? Color.red : Color.secondary)
+                    .background(Color.gray.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                    Button(role: primaryRole, action: primaryAction) {
+                        Text(primaryTitle)
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white)
+                    .background(tintColor.gradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
+            }
+            .padding(22)
+            .frame(maxWidth: 340)
+            .background(
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .fill(Color.white)
+                    .shadow(color: Color.black.opacity(0.14), radius: 28, x: 0, y: 16)
+            )
+            .padding(.horizontal, 26)
+        }
+    }
+
+    private var highlightedMessage: Text {
+        Text(messagePrefix + "“")
+            .foregroundStyle(.secondary)
+        + Text(highlightedText)
+            .foregroundStyle(tintColor)
+            .fontWeight(.heavy)
+        + Text("”" + messageSuffix)
+            .foregroundStyle(.secondary)
+    }
+}
+
+// 首页标题区。
+private struct HomeHeaderView: View {
+    let dateText: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text("今日行为记录")
+                .font(.largeTitle.bold())
+            Text(dateText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+// 首页行为按钮。
+private struct BehaviorButtonRow: View {
+    let behavior: BehaviorItem
+    let onTap: () -> Void
+    let onLongPress: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(behavior.name)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !behavior.detail.isEmpty {
+                Text(behavior.detail)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.82))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding()
+        .background(behavior.tintColor.gradient)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onTapGesture(perform: onTap)
+        .onLongPressGesture(perform: onLongPress)
+    }
+}
+
+// 首页“今天统计”的单行。
+private struct TodayCountRow: View {
+    let item: DailyBehaviorCount
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Circle()
+                .fill(item.behavior.tintColor)
+                .frame(width: 12, height: 12)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.behavior.name)
+                    .foregroundStyle(.primary)
+
+                if !item.behavior.detail.isEmpty {
+                    Text(item.behavior.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text("\(item.count)")
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(item.behavior.tintColor)
+
+                Text("次")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(item.behavior.tintColor.opacity(0.82))
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .background(Color.gray.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+// 详情页顶部的总次数文字。
+// 数字用行为颜色强调，其它说明文字保持弱化，阅读层级更清楚。
+private struct TotalCountText: View {
+    let prefix: String
+    let count: Int
+    let tintColor: Color
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(prefix)
+                .foregroundStyle(.secondary)
+
+            Text("\(count)")
+                .font(.subheadline.weight(.heavy))
+                .foregroundStyle(tintColor)
+
+            Text("次")
+                .foregroundStyle(tintColor.opacity(0.82))
+        }
+        .font(.subheadline)
+    }
+}
+
+// 更多页面。
+// 这里先展示登录用户信息，后续可以继续追加设置项。
+private struct MoreView: View {
+    let user: BadUpUser?
+
+    var body: some View {
+        List {
+            Section("用户信息") {
+                InfoRow(title: "UserId", value: user.map { String($0.userId) } ?? "-")
+                InfoRow(title: "UserCode", value: user?.userCode ?? "-")
+                InfoRow(title: "DeviceId", value: user?.deviceId ?? "-")
+                InfoRow(title: "Platform", value: user?.platform ?? "-")
+                InfoRow(title: "AppVersion", value: user?.appVersion ?? "-")
+                InfoRow(title: "SystemVersion", value: user?.systemVersion ?? "-")
+            }
+
+            Section("更多") {
+                Text("其他选项后面再加")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("更多")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct InfoRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 110, alignment: .leading)
+
+            Text(value)
+                .fontWeight(.medium)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -799,12 +1528,15 @@ private struct AddBehaviorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @ObservedObject var viewModel: ContentViewModel
+    let userId: Int?
+    let editingBehavior: BehaviorItem?
 
     @State private var name = ""
     @State private var detail = ""
     @State private var selectedColor: BehaviorColorOption = .coral
     @State private var selectedPaletteHex: String?
     @State private var isShowingMoreColors = false
+    @State private var isSaving = false
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
 
@@ -818,6 +1550,38 @@ private struct AddBehaviorView: View {
 
     private var selectedColorHex: String {
         selectedPaletteHex ?? selectedColor.rawValue
+    }
+
+    init(viewModel: ContentViewModel, userId: Int?, editingBehavior: BehaviorItem? = nil) {
+        self.viewModel = viewModel
+        self.userId = userId
+        self.editingBehavior = editingBehavior
+
+        _name = State(initialValue: editingBehavior?.name ?? "")
+        _detail = State(initialValue: editingBehavior?.detail ?? "")
+
+        if let editingBehavior {
+            if let defaultColor = BehaviorColorOption(rawValue: editingBehavior.colorHex) {
+                _selectedColor = State(initialValue: defaultColor)
+                _selectedPaletteHex = State(initialValue: nil)
+            } else {
+                _selectedColor = State(initialValue: .coral)
+                _selectedPaletteHex = State(initialValue: editingBehavior.colorHex)
+            }
+        } else {
+            _selectedColor = State(initialValue: .coral)
+            _selectedPaletteHex = State(initialValue: nil)
+        }
+    }
+
+    private func hasNoChanges(comparedWith behavior: BehaviorItem) -> Bool {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let originalDetail = behavior.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return trimmedName == behavior.name
+            && trimmedDetail == originalDetail
+            && selectedColorHex == behavior.colorHex
     }
 
     var body: some View {
@@ -890,7 +1654,7 @@ private struct AddBehaviorView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
             }
-            .navigationTitle("新增行为")
+            .navigationTitle(editingBehavior == nil ? "新增行为" : "编辑行为")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -901,15 +1665,43 @@ private struct AddBehaviorView: View {
 
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("保存") {
-                        let success = viewModel.addBehavior(
-                            name: name,
-                            detail: detail,
-                            colorHex: selectedColorHex
-                        )
-                        if success {
+                        guard let userId else {
+                            viewModel.addBehaviorErrorMessage = "用户信息异常，请重新打开 App"
+                            return
+                        }
+
+                        if let editingBehavior, hasNoChanges(comparedWith: editingBehavior) {
                             dismiss()
+                            return
+                        }
+
+                        isSaving = true
+                        Task {
+                            let success: Bool
+                            if let editingBehavior {
+                                success = await viewModel.updateBehavior(
+                                    editingBehavior,
+                                    userId: userId,
+                                    name: name,
+                                    detail: detail,
+                                    colorHex: selectedColorHex
+                                )
+                            } else {
+                                success = await viewModel.addBehavior(
+                                    userId: userId,
+                                    name: name,
+                                    detail: detail,
+                                    colorHex: selectedColorHex
+                                )
+                            }
+
+                            isSaving = false
+                            if success {
+                                dismiss()
+                            }
                         }
                     }
+                    .disabled(isSaving)
                 }
             }
             .alert(
@@ -1000,7 +1792,7 @@ private struct BehaviorYearDetailView: View {
     init(behavior: BehaviorItem) {
         self.behavior = behavior
         let year = Calendar.current.component(.year, from: Date())
-        _viewModel = StateObject(wrappedValue: BehaviorYearViewModel(behavior: behavior, year: year))
+        _viewModel = StateObject(wrappedValue: BehaviorYearViewModel(behavior: behavior))
     }
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
@@ -1025,9 +1817,11 @@ private struct BehaviorYearDetailView: View {
                     VStack(spacing: 4) {
                         Text("\(selectedYear)年")
                             .font(.system(size: 34, weight: .heavy))
-                        Text("\(behavior.name) 共 \(viewModel.totalCount) 次")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        TotalCountText(
+                            prefix: "\(behavior.name) 共",
+                            count: viewModel.totalCount,
+                            tintColor: behavior.tintColor
+                        )
                     }
 
                     Spacer()
@@ -1070,8 +1864,8 @@ private struct BehaviorYearDetailView: View {
         .background(Color.white.opacity(0.001))
         .navigationTitle(behavior.name)
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: selectedYear) { _, newYear in
-            viewModel.load(year: newYear)
+        .task(id: selectedYear) {
+            await viewModel.load(year: selectedYear)
         }
     }
 }
@@ -1098,7 +1892,7 @@ private struct BehaviorMonthDetailView: View {
         self.year = year
         self.month = month
         _viewModel = StateObject(
-            wrappedValue: BehaviorMonthViewModel(behavior: behavior, year: year, month: month)
+            wrappedValue: BehaviorMonthViewModel(behavior: behavior)
         )
     }
 
@@ -1116,9 +1910,11 @@ private struct BehaviorMonthDetailView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("\(month)月")
                         .font(.system(size: 30, weight: .heavy))
-                    Text("\(behavior.name) 本月共 \(viewModel.totalCount) 次")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    TotalCountText(
+                        prefix: "\(behavior.name) 本月共",
+                        count: viewModel.totalCount,
+                        tintColor: behavior.tintColor
+                    )
                 }
 
                 LazyVGrid(columns: columns, spacing: 10) {
@@ -1151,6 +1947,9 @@ private struct BehaviorMonthDetailView: View {
         }
         .navigationTitle("\(year)年\(month)月")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.load(year: year, month: month)
+        }
     }
 }
 
@@ -1170,7 +1969,7 @@ private struct BehaviorDayDetailView: View {
     init(behavior: BehaviorItem, date: Date) {
         self.behavior = behavior
         self.date = date
-        _viewModel = StateObject(wrappedValue: BehaviorDayViewModel(behavior: behavior, date: date))
+        _viewModel = StateObject(wrappedValue: BehaviorDayViewModel(behavior: behavior))
     }
 
     private var dayTitle: String {
@@ -1210,9 +2009,11 @@ private struct BehaviorDayDetailView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(dayTitle)
                         .font(.title2.bold())
-                    Text("\(behavior.name) 当天共 \(viewModel.totalCount) 次")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    TotalCountText(
+                        prefix: "\(behavior.name) 当天共",
+                        count: viewModel.totalCount,
+                        tintColor: behavior.tintColor
+                    )
                 }
                 .padding(.horizontal)
 
@@ -1229,6 +2030,9 @@ private struct BehaviorDayDetailView: View {
         }
         .navigationTitle("\(calendar.component(.day, from: date))日")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.load(date: date)
+        }
     }
 }
 
