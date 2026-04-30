@@ -41,13 +41,13 @@ function badRequireFields($data, $fields) {
     }
 }
 
-// 统一行为类型：1 表示好行为，-1 表示坏行为。
-// 客户端未传或传错时默认按坏行为处理，避免错误加分。
+// 统一习惯类型：1 表示好习惯，-1 表示坏习惯。
+// 客户端未传或传错时默认按坏习惯处理，避免错误加分。
 function badNormalizeBehaviorType($value) {
     return intval($value) === 1 ? 1 : -1;
 }
 
-// 单次记录的行为分：好行为 +1，坏行为 -10。
+// 单次记录的习惯分：好习惯 +1，坏习惯 -10。
 function badScoreUnitByBehaviorType($behaviorType) {
     return badNormalizeBehaviorType($behaviorType) === 1 ? 1 : -10;
 }

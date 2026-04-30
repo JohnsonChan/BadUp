@@ -43,7 +43,7 @@ try {
     badResponse(200, 'InsertSuccess', ['data' => $query->fetch()]);
 } catch (PDOException $e) {
     if ($e->getCode() === '23000') {
-        badResponse(409, '这个行为名称已经存在，请换一个名称');
+        badResponse(409, '这个习惯名称已经存在，请换一个名称');
     }
     badResponse(500, 'DataError: ' . $e->getMessage());
 }

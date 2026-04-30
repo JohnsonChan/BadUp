@@ -31,13 +31,13 @@ const primaryPalette = [
 ]
 const primaryColorHexes = fullPalette.slice(0, 7).map((item) => item.hex)
 const behaviorTypes = [
-  { value: 1, name: '好行为', desc: '记录一次 +1 分' },
-  { value: -1, name: '坏行为', desc: '记录一次 -10 分' },
+  { value: 1, name: '好习惯', desc: '记录一次 +1 分' },
+  { value: -1, name: '坏习惯', desc: '记录一次 -10 分' },
 ]
 
 Page({
   data: {
-    // add: 新增行为；edit: 编辑已有行为。
+    // add: 新增习惯；edit: 编辑已有习惯。
     mode: 'add',
     behaviorId: null,
     name: '',
@@ -131,7 +131,7 @@ Page({
       return
     }
     if (!name) {
-      wx.showToast({ title: '请输入行为名称', icon: 'none' })
+      wx.showToast({ title: '请输入习惯名称', icon: 'none' })
       return
     }
 

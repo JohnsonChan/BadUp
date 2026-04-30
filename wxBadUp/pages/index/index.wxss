@@ -185,7 +185,7 @@ page {
   font-size: 26rpx;
 }
 
-/* 行为操作按钮列表。 */
+/* 习惯操作按钮列表。 */
 .behavior-list {
   display: flex;
   flex-direction: column;

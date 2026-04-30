@@ -1,24 +1,24 @@
 <view class="page">
-  <navigation-bar title="{{mode === 'edit' ? '编辑行为' : '新增行为'}}" color="#182827" background="#F6FBF8"></navigation-bar>
+  <navigation-bar title="{{mode === 'edit' ? '编辑习惯' : '新增习惯'}}" color="#182827" background="#F6FBF8"></navigation-bar>
 
   <scroll-view class="scrollarea" scroll-y>
     <view class="content">
-      <!-- 行为名称输入。 -->
+      <!-- 习惯名称输入。 -->
       <view class="section">
-        <view class="label">行为名称</view>
+        <view class="label">习惯名称</view>
         <input class="input" value="{{name}}" placeholder="例如：刷视频" bindinput="onNameInput" />
       </view>
 
-      <!-- 行为描述输入。 -->
+      <!-- 习惯描述输入。 -->
       <view class="section">
-        <view class="label">行为描述</view>
+        <view class="label">习惯描述</view>
         <textarea class="textarea" value="{{desc}}" placeholder="写一句提醒自己的描述" maxlength="120" bindinput="onDescInput" />
       </view>
 
-      <!-- 行为好坏选择。 -->
+      <!-- 习惯好坏选择。 -->
       <view class="section">
         <view class="label label-with-tip">
-          <text>行为类型</text>
+          <text>习惯类型</text>
           <text wx:if="{{mode === 'edit'}}" class="type-lock-tip">编辑时不可修改</text>
         </view>
         <view class="type-switch">
@@ -67,8 +67,8 @@
       <view class="section">
         <view class="label">预览</view>
         <view class="preview" style="background: {{colorHex}};">
-          <view class="preview-name">{{name || '行为名称'}}</view>
-          <view class="preview-desc">{{desc || '这里会显示行为描述'}}</view>
+          <view class="preview-name">{{name || '习惯名称'}}</view>
+          <view class="preview-desc">{{desc || '这里会显示习惯描述'}}</view>
         </view>
       </view>
 

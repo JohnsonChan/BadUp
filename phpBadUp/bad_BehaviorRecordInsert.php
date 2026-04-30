@@ -1,6 +1,6 @@
 <?php
-// 行为记录新增接口。
-// 点击首页行为按钮并确认后，客户端会调用这里写入一条 bad_BehaviorRecord。
+// 习惯记录新增接口。
+// 点击首页习惯按钮并确认后，客户端会调用这里写入一条 bad_BehaviorRecord。
 require_once "bad_Common.php";
 require_once "bad_Database.php";
 
@@ -20,7 +20,7 @@ try {
         $countNum = 1;
     }
 
-    // 分数按行为当前类型写入记录表，避免以后修改行为类型影响历史分数。
+    // 分数按习惯当前类型写入记录表，避免以后修改习惯类型影响历史分数。
     $behaviorQuery = $pdo->prepare("SELECT userId, behaviorType FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
     $behaviorQuery->execute([':behaviorId' => $behaviorId]);
     $behavior = $behaviorQuery->fetch();

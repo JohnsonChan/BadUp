@@ -89,7 +89,7 @@ Component({
       })
     },
 
-    // 默认返回行为；页面也可以监听 back 事件做额外处理。
+    // 默认返回上一页；页面也可以监听 back 事件做额外处理。
     back() {
       const data = this.data
       if (data.delta) {

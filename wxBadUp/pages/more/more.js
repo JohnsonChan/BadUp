@@ -39,7 +39,7 @@ Page({
       })
       .catch((error) => {
         this.setData({ behaviorScore: '-' })
-        wx.showToast({ title: error.message || '行为分加载失败', icon: 'none' })
+        wx.showToast({ title: error.message || '习惯分加载失败', icon: 'none' })
       })
   },
 

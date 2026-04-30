@@ -10,8 +10,8 @@ if (empty($data['deviceId']) && empty($data['phone']) && empty($data['userCode']
     badResponse(400, 'NoLoginKey');
 }
 
-// 确保新用户有默认行为项。
-// 改为真实删除行为后，只在注册时调用，避免用户删完行为后下次登录又被自动恢复。
+// 确保新用户有默认习惯项。
+// 改为真实删除习惯后，只在注册时调用，避免用户删完习惯后下次登录又被自动恢复。
 // 小程序和 iOS 使用不同的默认项，方便分别迭代。
 function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $count = $pdo->prepare("SELECT COUNT(*) FROM bad_Behavior WHERE userId = :userId");
@@ -24,10 +24,9 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $platform = trim((string)$platform);
 
     $defaults = [
-            ['运动', '记录一次没忍住', '#F55F52', -1, 10],
-            ['刷视频', '记录一次沉迷短视频', '#31B3C5', -1, 20],
-            ['熬夜', '记录一次睡太晚', '#6C7EF7', -1, 30],
-            ['吃太饱', '记录一次吃撑了', '#F9B536', -1, 40]
+            ['运动', '身体坏了，什么都没了', '#43C77A', 1, 10],
+            ['学习', '每天进步一点点，未来就会不一样', '#31B3C5', 1, 20],
+            ['熬夜', '看看一年熬夜多少次', '#6C7EF7', -1, 30]
         ];
 
     $insert = $pdo->prepare("

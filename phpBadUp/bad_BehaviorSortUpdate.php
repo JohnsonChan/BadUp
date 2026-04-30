@@ -29,7 +29,7 @@ try {
     $pdo = Database::getPdoInstance();
     $pdo->beginTransaction();
 
-    // 只更新当前用户自己的行为，避免用户调整系统共享行为或其它用户的数据。
+    // 只更新当前用户自己的习惯，避免用户调整系统共享习惯或其它用户的数据。
     $stmt = $pdo->prepare("
         UPDATE bad_Behavior
            SET sortOrder = :sortOrder

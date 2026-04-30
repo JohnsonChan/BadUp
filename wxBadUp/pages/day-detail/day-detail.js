@@ -11,7 +11,7 @@ Page({
   },
 
   onLoad(options) {
-    // 日详情只需要行为信息和日期。
+    // 日详情只需要习惯信息和日期。
     const behavior = {
       behaviorId: Number(options.behaviorId),
       behaviorName: decodeURIComponent(options.name || ''),

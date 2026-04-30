@@ -21,7 +21,7 @@ try {
         badResponse(404, 'BehaviorNotFound');
     }
 
-    // 只允许删除当前用户自己创建的行为，避免误删系统共享行为。
+    // 只允许删除当前用户自己创建的习惯，避免误删系统共享习惯。
     if ($behavior['userId'] === null || intval($behavior['userId']) !== $userId) {
         $pdo->rollBack();
         badResponse(403, 'PermissionDenied');

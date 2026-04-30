@@ -135,7 +135,7 @@ Page({
     this.startLaunchFlow()
   },
 
-  // 拉取首页今天的行为和统计，并整理成页面更好用的结构。
+  // 拉取首页今天的习惯和统计，并整理成页面更好用的结构。
   loadToday() {
     const { user, todayDate } = this.data
     if (!user) return Promise.resolve()
@@ -198,7 +198,7 @@ Page({
     return result
   },
 
-  // 进入新增行为页。
+  // 进入新增习惯页。
   goAddBehavior() {
     wx.navigateTo({ url: '/pages/behavior-form/behavior-form' })
   },
@@ -477,7 +477,7 @@ Page({
       })
   },
 
-  // 进入编辑页，并把当前行为信息拼到 query 里带过去。
+  // 进入编辑页，并把当前习惯信息拼到 query 里带过去。
   editBehavior() {
     const behavior = this.data.pendingAction
     if (!behavior) return
@@ -498,7 +498,7 @@ Page({
     })
   },
 
-  // 删除行为后，重新刷新首页列表。
+  // 删除习惯后，重新刷新首页列表。
   deleteBehavior() {
     const { user, pendingDelete } = this.data
     if (!user || !pendingDelete) return

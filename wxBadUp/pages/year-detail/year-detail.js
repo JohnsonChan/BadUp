@@ -10,7 +10,7 @@ Page({
   },
 
   onLoad(options) {
-    // 详情页所需的行为信息由首页通过 query 传入。
+    // 详情页所需的习惯信息由首页通过 query 传入。
     const behavior = {
       behaviorId: Number(options.behaviorId),
       behaviorName: decodeURIComponent(options.name || ''),

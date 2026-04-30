@@ -16,7 +16,7 @@ Page({
   },
 
   onLoad(options) {
-    // 从上一层页面接收行为信息和年月。
+    // 从上一层页面接收习惯信息和年月。
     const year = Number(options.year)
     const month = Number(options.month)
     const behavior = {

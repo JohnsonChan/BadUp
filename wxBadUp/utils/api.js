@@ -46,9 +46,10 @@ function formatApiMessage(message) {
     text.indexOf('Integrity constraint') !== -1 ||
     text.indexOf('Duplicate entry') !== -1 ||
     text.indexOf('uniq_userId_behaviorName') !== -1 ||
-    text.indexOf('这个行为名称已经存在') !== -1
+    text.indexOf('名称已经存在') !== -1 ||
+    text.indexOf('这个习惯名称已经存在') !== -1
   ) {
-    return '这个行为名称已经存在，请换一个名称'
+    return '这个习惯名称已经存在，请换一个名称'
   }
   return text
 }
@@ -78,13 +79,13 @@ function loginOrRegister() {
   }).then((res) => res.data)
 }
 
-// 拉取今天的行为列表和对应计数。
+// 拉取今天的习惯列表和对应计数。
 function fetchTodayCounts(userId, recordDate) {
   return request('bad_BehaviorTodayCount.php', { userId, recordDate })
     .then((res) => res.list || [])
 }
 
-// 新增一个行为项。
+// 新增一个习惯项。
 function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType) {
   return request('bad_BehaviorInsert.php', {
     userId,
@@ -95,7 +96,7 @@ function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType)
   }).then((res) => res.data)
 }
 
-// 编辑已有行为项。
+// 编辑已有习惯项。
 function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex) {
   return request('bad_BehaviorUpdate.php', {
     userId,
@@ -106,17 +107,17 @@ function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex
   }).then((res) => res.data)
 }
 
-// 删除行为项及其相关记录。
+// 删除习惯项及其相关记录。
 function deleteBehavior(userId, behaviorId) {
   return request('bad_BehaviorDelete.php', { userId, behaviorId })
 }
 
-// 更新行为项展示顺序。
+// 更新习惯项展示顺序。
 function updateBehaviorSort(userId, behaviorIds) {
   return request('bad_BehaviorSortUpdate.php', { userId, behaviorIds })
 }
 
-// 追加一条行为记录。
+// 追加一条习惯记录。
 // clientUid 用来给服务端做幂等或排查时的客户端标识。
 function insertRecord(userId, behaviorId, recordDate, recordedAt) {
   return request('bad_BehaviorRecordInsert.php', {
@@ -147,7 +148,7 @@ function fetchDayStats(behaviorId, recordDate) {
     .then((res) => res.list || [])
 }
 
-// 拉取用户累计行为分。
+// 拉取用户累计习惯分。
 function fetchUserBehaviorScore(userId) {
   return request('bad_UserBehaviorScore.php', { userId })
     .then((res) => res.data || { behaviorScore: 0, totalCount: 0 })

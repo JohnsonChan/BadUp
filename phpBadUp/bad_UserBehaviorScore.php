@@ -1,6 +1,6 @@
 <?php
-// 用户行为分汇总接口。
-// 好行为每次 +1，坏行为每次 -10；分数在写入记录时固化到 scoreValue。
+// 用户习惯分汇总接口。
+// 好习惯每次 +1，坏习惯每次 -10；分数在写入记录时固化到 scoreValue。
 require_once "bad_Common.php";
 require_once "bad_Database.php";
 

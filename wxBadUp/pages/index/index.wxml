@@ -1,4 +1,4 @@
-<!-- 首页：闪屏、行为按钮、今日统计都集中在这里。 -->
+<!-- 首页：闪屏、习惯按钮、今日统计都集中在这里。 -->
 <view class="page">
   <!-- 启动闪屏：逻辑与 iOS 一致，登录失败时继续停留在这里。 -->
   <view wx:if="{{isSplashVisible}}" class="splash">
@@ -42,11 +42,11 @@
       <view class="content">
         <!-- 当天概览。 -->
         <view class="hero">
-          <view class="hero-title">今日行为记录</view>
+          <view class="hero-title">今日习惯记录</view>
           <view class="hero-date">{{todayText}}</view>
         </view>
 
-        <!-- 可点击记录的行为按钮列表。 -->
+        <!-- 可点击记录的习惯按钮列表。 -->
         <view class="behavior-list">
           <view
             wx:for="{{behaviors}}"
@@ -91,7 +91,7 @@
       </view>
     </scroll-view>
 
-    <!-- 点击行为后的确认记录弹窗。 -->
+    <!-- 点击习惯后的确认记录弹窗。 -->
     <view wx:if="{{pendingRecord}}" class="dialog-mask">
       <view class="dialog-card">
         <view class="dialog-bar" style="background: {{pendingRecord.colorHex}};"></view>
@@ -106,11 +106,11 @@
       </view>
     </view>
 
-    <!-- 长按行为后的编辑 / 删除弹窗。 -->
+    <!-- 长按习惯后的编辑 / 删除弹窗。 -->
     <view wx:if="{{pendingAction}}" class="dialog-mask">
       <view class="dialog-card">
         <view class="dialog-bar" style="background: {{pendingAction.colorHex}};"></view>
-        <view class="dialog-title">管理行为项</view>
+        <view class="dialog-title">管理习惯项</view>
         <view class="dialog-message">
           <text class="dialog-line">编辑或删除“<text class="dialog-highlight" style="color: {{pendingAction.colorHex}};">{{pendingAction.behaviorName}}</text>”？删除会清除历史。</text>
         </view>
@@ -121,7 +121,7 @@
       </view>
     </view>
 
-    <!-- 删除前的二次确认弹窗，避免误删行为和历史记录。 -->
+    <!-- 删除前的二次确认弹窗，避免误删习惯和历史记录。 -->
     <view wx:if="{{pendingDelete}}" class="dialog-mask">
       <view class="dialog-card">
         <view class="dialog-bar danger-bar"></view>
