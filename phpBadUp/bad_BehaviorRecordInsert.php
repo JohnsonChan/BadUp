@@ -21,15 +21,12 @@ try {
     }
 
     // 分数按行为当前类型写入记录表，避免以后修改行为类型影响历史分数。
-    $behaviorQuery = $pdo->prepare("SELECT userId, behaviorType, isActive FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
+    $behaviorQuery = $pdo->prepare("SELECT userId, behaviorType FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
     $behaviorQuery->execute([':behaviorId' => $behaviorId]);
     $behavior = $behaviorQuery->fetch();
 
     if (!$behavior) {
         badResponse(404, 'BehaviorNotFound');
-    }
-    if (intval($behavior['isActive']) !== 1) {
-        badResponse(403, 'BehaviorDisabled');
     }
     if ($userId !== null && $behavior['userId'] !== null && intval($behavior['userId']) !== $userId) {
         badResponse(403, 'PermissionDenied');

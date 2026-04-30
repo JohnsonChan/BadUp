@@ -43,6 +43,16 @@ Page({
       })
   },
 
+  // 点击生长指数时，进入网页页，并把当前指数作为 index 参数传给网页。
+  openGrowthIndexPage() {
+    const score = Number(this.data.behaviorScore)
+    const index = Number.isFinite(score) ? score : 0
+
+    wx.navigateTo({
+      url: `/pages/growth-web/growth-web?index=${encodeURIComponent(index)}`,
+    })
+  },
+
   // 将服务端 platform 字段统一转换为页面展示文案。
   formatPlatformName(platform) {
     const value = String(platform || '').trim().toLowerCase()

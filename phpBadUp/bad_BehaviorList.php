@@ -12,8 +12,7 @@ try {
         $sql = "
             SELECT *
             FROM bad_Behavior
-            WHERE isActive = 1
-              AND (userId IS NULL OR userId = :userId)
+            WHERE userId IS NULL OR userId = :userId
             ORDER BY sortOrder ASC, behaviorId ASC
         ";
         $stmt = $pdo->prepare($sql);
@@ -22,7 +21,7 @@ try {
         $sql = "
             SELECT *
             FROM bad_Behavior
-            WHERE isActive = 1 AND userId IS NULL
+            WHERE userId IS NULL
             ORDER BY sortOrder ASC, behaviorId ASC
         ";
         $stmt = $pdo->query($sql);

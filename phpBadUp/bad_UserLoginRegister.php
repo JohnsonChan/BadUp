@@ -10,8 +10,8 @@ if (empty($data['deviceId']) && empty($data['phone']) && empty($data['userCode']
     badResponse(400, 'NoLoginKey');
 }
 
-// 确保新用户或旧空用户有默认行为项。
-// 只在该 userId 没有任何行为项时初始化，避免用户删除后下次登录又被自动恢复。
+// 确保新用户有默认行为项。
+// 改为真实删除行为后，只在注册时调用，避免用户删完行为后下次登录又被自动恢复。
 // 小程序和 iOS 使用不同的默认项，方便分别迭代。
 function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $count = $pdo->prepare("SELECT COUNT(*) FROM bad_Behavior WHERE userId = :userId");
@@ -32,9 +32,9 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
 
     $insert = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, isActive, createdAt)
+        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, createdAt)
         VALUES
-        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, 1, :createdAt)
+        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :createdAt)
     ");
 
     foreach ($defaults as $item) {
@@ -95,11 +95,6 @@ try {
 
         $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
         $stmt->execute([':userId' => $user['userId']]);
-        badEnsureDefaultBehaviors(
-            $pdo,
-            $user['userId'],
-            isset($data['platform']) ? $data['platform'] : (isset($user['platform']) ? $user['platform'] : '')
-        );
         badResponse(200, 'logOk', ['data' => $stmt->fetch()]);
     }
 

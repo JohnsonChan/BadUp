@@ -6,7 +6,7 @@
     <view class="section-title">种子信息</view>
     <view class="card">
       <view class="row"><text>种子编号</text><text>{{user.userId || '-'}}</text></view>
-      <view class="row"><text>生长指数</text><text class="score-value {{behaviorScoreClass}}">{{behaviorScore}}</text></view>
+      <view class="row clickable-row" bindtap="openGrowthIndexPage" hover-class="row-hover"><text>生长指数</text><text class="score-value {{behaviorScoreClass}}">{{behaviorScore}}</text></view>
       <view class="row"><text>播种日期</text><text>{{registerDate}}</text></view>
       <view class="row"><text>发芽土地</text><text>{{platformName}}</text></view>
     </view>

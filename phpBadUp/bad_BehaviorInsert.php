@@ -11,18 +11,17 @@ try {
 
     $stmt = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, isActive, createdAt)
+        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, createdAt)
         VALUES
-        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :isActive, :createdAt)
+        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :createdAt)
     ");
     $stmt->execute([
         ':userId' => isset($data['userId']) && $data['userId'] !== '' ? intval($data['userId']) : null,
         ':behaviorName' => trim($data['behaviorName']),
         ':behaviorDesc' => isset($data['behaviorDesc']) ? trim($data['behaviorDesc']) : '',
         ':colorHex' => trim($data['colorHex']),
-        ':behaviorType' => isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : -1,
+        ':behaviorType' => isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : 1,
         ':sortOrder' => isset($data['sortOrder']) ? intval($data['sortOrder']) : 0,
-        ':isActive' => isset($data['isActive']) ? intval($data['isActive']) : 1,
         ':createdAt' => $createdAt
     ]);
 
@@ -31,6 +30,9 @@ try {
     $query->execute([':behaviorId' => $behaviorId]);
     badResponse(200, 'InsertSuccess', ['data' => $query->fetch()]);
 } catch (PDOException $e) {
+    if ($e->getCode() === '23000') {
+        badResponse(409, '这个行为名称已经存在，请换一个名称');
+    }
     badResponse(500, 'DataError: ' . $e->getMessage());
 }
 ?>

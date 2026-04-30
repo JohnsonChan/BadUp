@@ -10,7 +10,6 @@ CREATE TABLE `bad_Behavior` (
   `colorHex` varchar(7) NOT NULL COMMENT '按钮颜色，例如 #F55F52',
   `behaviorType` tinyint(4) NOT NULL DEFAULT '-1' COMMENT '行为类型：1好行为，-1坏行为',
   `sortOrder` int(11) NOT NULL DEFAULT '0' COMMENT '排序值，数值越小越靠前，暂时没用',
-  `isActive` tinyint(1) NOT NULL DEFAULT '1' COMMENT '是否启用，1启用，0停用，暂时没用',
   `createdAt` datetime NOT NULL COMMENT '创建时间，由PHP赋值',
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`behaviorId`),

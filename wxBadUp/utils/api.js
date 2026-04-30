@@ -27,7 +27,7 @@ function request(endpoint, data = {}) {
           return
         }
         if (Number(body.code) !== 200) {
-          reject(new Error(body.msg || '服务端返回失败'))
+          reject(new Error(formatApiMessage(body.msg || '服务端返回失败')))
           return
         }
         resolve(body)
@@ -37,6 +37,20 @@ function request(endpoint, data = {}) {
       },
     })
   })
+}
+
+function formatApiMessage(message) {
+  const text = String(message || '')
+  if (
+    text.indexOf('DuplicateBehaviorName') !== -1 ||
+    text.indexOf('Integrity constraint') !== -1 ||
+    text.indexOf('Duplicate entry') !== -1 ||
+    text.indexOf('uniq_userId_behaviorName') !== -1 ||
+    text.indexOf('这个行为名称已经存在') !== -1
+  ) {
+    return '这个行为名称已经存在，请换一个名称'
+  }
+  return text
 }
 
 // 小程序无法像原生 App 一样拿到稳定设备标识，这里退而求其次：
@@ -82,14 +96,13 @@ function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType)
 }
 
 // 编辑已有行为项。
-function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex, behaviorType) {
+function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex) {
   return request('bad_BehaviorUpdate.php', {
     userId,
     behaviorId,
     behaviorName,
     behaviorDesc,
     colorHex,
-    behaviorType,
   }).then((res) => res.data)
 }
 

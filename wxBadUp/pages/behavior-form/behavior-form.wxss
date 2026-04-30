@@ -28,6 +28,12 @@ page {
   font-weight: 800;
 }
 
+.label-with-tip {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+}
+
 .input,
 .textarea {
   width: 100%;
@@ -75,6 +81,10 @@ page {
   background: rgba(225, 90, 82, 0.10);
 }
 
+.type-option.disabled {
+  opacity: 0.72;
+}
+
 .type-name {
   color: #1f2d2b;
   font-size: 27rpx;
@@ -96,6 +106,12 @@ page {
 .type-option.selected.bad .type-name,
 .type-option.selected.bad .type-desc {
   color: #d84f49;
+}
+
+.type-lock-tip {
+  color: #8a9693;
+  font-size: 22rpx;
+  font-weight: 600;
 }
 
 /* 颜色面板。 */

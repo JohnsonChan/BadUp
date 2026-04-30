@@ -26,8 +26,7 @@ try {
         UPDATE bad_Behavior
            SET behaviorName = :behaviorName,
                behaviorDesc = :behaviorDesc,
-               colorHex = :colorHex,
-               behaviorType = :behaviorType
+               colorHex = :colorHex
          WHERE behaviorId = :behaviorId
          LIMIT 1
     ");
@@ -36,7 +35,6 @@ try {
         ':behaviorName' => trim($data['behaviorName']),
         ':behaviorDesc' => isset($data['behaviorDesc']) ? trim($data['behaviorDesc']) : '',
         ':colorHex' => trim($data['colorHex']),
-        ':behaviorType' => isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : badNormalizeBehaviorType($behavior['behaviorType']),
         ':behaviorId' => $behaviorId
     ]);
 
@@ -44,6 +42,9 @@ try {
     $query->execute([':behaviorId' => $behaviorId]);
     badResponse(200, 'UpdateSuccess', ['data' => $query->fetch()]);
 } catch (PDOException $e) {
+    if ($e->getCode() === '23000') {
+        badResponse(409, '这个行为名称已经存在，请换一个名称');
+    }
     badResponse(500, 'DataError: ' . $e->getMessage());
 }
 ?>

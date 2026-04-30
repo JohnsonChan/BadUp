@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>种子芽记</title>
+    <style>
+        :root {
+            --bg-top: #f4f9f4;
+            --bg-bottom: #ffffff;
+            --tree-brown: #3e2723;
+            --accent: #2e7d32;
+            --track-bg: #e0e7e0;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0; padding: 0; height: 100vh;
+            background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+            display: flex; flex-direction: column;
+            font-family: -apple-system, "Noto Sans SC", sans-serif;
+            overflow: hidden;
+        }
+
+        .header { text-align: center; padding: 50px 20px 10px; z-index: 10; }
+        h1 { font-size: 1.6rem; font-weight: 300; letter-spacing: 0.5rem; margin: 0; color: var(--tree-brown); }
+        #desc { font-size: 0.85rem; color: #6d8e6d; margin-top: 10px; font-weight: 300; }
+
+        #container { flex-grow: 1; width: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
+        canvas { display: block; z-index: 5; filter: drop-shadow(0 10px 30px rgba(0,0,0,0.06)); }
+
+        .footer {
+            margin: 0 25px 50px; padding: 20px 25px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border-radius: 24px; border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05); z-index: 20;
+        }
+
+        .stage-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .stage-title { color: var(--accent); font-weight: 600; font-size: 1rem; }
+        .index-display { color: #888; font-size: 0.8rem; }
+        #idxVal { font-weight: 600; color: var(--accent); }
+
+        .progress-container { width: 100%; height: 6px; background: var(--track-bg); border-radius: 3px; position: relative; }
+        #progress-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0%; transition: width 0.8s ease-out; position: relative; }
+        #progress-thumb { width: 18px; height: 18px; background: #fff; border: 2px solid var(--accent); border-radius: 50%; position: absolute; right: -9px; top: 50%; transform: translateY(-50%); box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1 id="mainTitle">种子芽记</h1>
+    <div id="desc">加载中...</div>
+</div>
+
+<div id="container">
+    <canvas id="treeCanvas"></canvas>
+</div>
+
+<div class="footer">
+    <div class="stage-label">
+        <span class="stage-title" id="stageName">载入中...</span>
+        <span class="index-display">成长指数：<span id="idxVal">0</span></span>
+    </div>
+    <div class="progress-container">
+        <div id="progress-fill">
+            <div id="progress-thumb"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('treeCanvas');
+    const ctx = canvas.getContext('2d');
+    const stageName = document.getElementById('stageName');
+    const idxVal = document.getElementById('idxVal');
+    const desc = document.getElementById('desc');
+    const progressFill = document.getElementById('progress-fill');
+
+    const stages = [
+        { n: "静谧萌发", d: "生命在泥土中沉睡，积蓄破土的力量。" },
+        { n: "破土嫩芽", d: "勇敢地顶开泥土，向世界问好。" },
+        { n: "写实双叶", d: "舒展的嫩芽，汲取岁月精华。" },
+        { n: "韧性初显", d: "躯干逐渐挺拔，无惧微风掠过。" },
+        { n: "向光生长", d: "每一个分叉，都是向天空的探索。" },
+        { n: "少年青葱", d: "枝干交叠错落，初现生命繁华。" },
+        { n: "繁枝错落", d: "岁月留下痕迹，构筑独特风骨。" },
+        { n: "绿意叠嶂", d: "叶影在阳光下，交织光阴故事。" },
+        { n: "生命礼赞", d: "厚重而苍劲，守护脚下土地。" },
+        { n: "参天屹立", d: "阅尽千帆，归于大自然的平静。" }
+    ];
+
+    function getStageFromIndex(index) {
+        if (index <= 0) return 0;
+        if (index <= 10) return 1;
+        if (index <= 50) return 2;
+        if (index <= 100) return 3;
+        if (index <= 300) return 4;
+        if (index <= 500) return 5;
+        if (index <= 1000) return 6;
+        if (index <= 2000) return 7;
+        if (index <= 3000) return 8;
+        return 9; 
+    }
+
+    let dpr = window.devicePixelRatio || 1;
+    let viewSize = 0;
+    let currentStage = 0;
+
+    function initCanvas() {
+        const container = document.getElementById('container');
+        viewSize = Math.min(container.clientWidth, container.clientHeight) * 0.85;
+        canvas.width = viewSize * dpr;
+        canvas.height = viewSize * dpr;
+        canvas.style.width = viewSize + 'px';
+        canvas.style.height = viewSize + 'px';
+        ctx.scale(dpr, dpr);
+        render();
+    }
+
+    // 绘制写实种子
+    function drawSeed(x, y) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-0.2); // 稍微倾斜，更自然
+        
+        // 种子主体渐变
+        const seedGrad = ctx.createRadialGradient(-2, -3, 1, 0, 0, 10);
+        seedGrad.addColorStop(0, "#a1887f"); // 高光部分
+        seedGrad.addColorStop(0.5, "#5d4037"); // 中间色
+        seedGrad.addColorStop(1, "#2b160e"); // 边缘暗部
+        
+        ctx.fillStyle = seedGrad;
+        
+        // 绘制椭圆种子
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 种子表面的微光纹理
+        ctx.beginPath();
+        ctx.ellipse(-3, -3, 4, 2, 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.fill();
+        
+        ctx.restore();
+    }
+
+    function drawLeaf(x, y, angle, scale, opacity) {
+        ctx.save();
+        ctx.translate(x, y); ctx.rotate(angle); ctx.scale(scale, scale);
+        const grad = ctx.createRadialGradient(0, 5, 0, 0, 5, 15);
+        grad.addColorStop(0, `rgba(165, 214, 167, ${opacity})`);
+        grad.addColorStop(1, `rgba(27, 94, 32, ${opacity})`);
+        ctx.beginPath(); ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(8, -8, 12, 8, 0, 22);
+        ctx.bezierCurveTo(-12, 8, -8, -8, 0, 0);
+        ctx.fillStyle = grad; ctx.fill();
+        ctx.restore();
+    }
+
+    function drawBranch(startX, startY, len, angle, width, lvl, maxLvl) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.translate(startX, startY); ctx.rotate(angle * Math.PI / 180);
+        const trunkGrad = ctx.createLinearGradient(0, 0, width, 0);
+        trunkGrad.addColorStop(0, "#3e2723"); trunkGrad.addColorStop(0.5, "#5d4037"); trunkGrad.addColorStop(1, "#3e2723");
+        ctx.strokeStyle = trunkGrad; ctx.lineWidth = width; ctx.lineCap = "round";
+        ctx.moveTo(0, 0); ctx.lineTo(0, -len); ctx.stroke();
+
+        if (lvl >= maxLvl) {
+            const count = 2 + (maxLvl > 5 ? 1 : 0);
+            for(let i=0; i<count; i++){
+                drawLeaf(0, -len, (i-1)*0.7 + (Math.random()-0.5)*0.5, 0.6 + (lvl/10), 0.9);
+            }
+            ctx.restore(); return;
+        }
+
+        const nextLen = len * (0.72 + (maxLvl * 0.005));
+        const nextWidth = width * 0.7;
+        const spread = 22 + (maxLvl * 0.7);
+        drawBranch(0, -len, nextLen, spread + Math.random()*3, nextWidth, lvl + 1, maxLvl);
+        drawBranch(0, -len, nextLen, -spread - Math.random()*3, nextWidth, lvl + 1, maxLvl);
+        ctx.restore();
+    }
+
+    function render() {
+        const st = stages[currentStage];
+        stageName.innerText = st.n;
+        desc.innerText = st.d;
+        ctx.clearRect(0, 0, viewSize, viewSize);
+        const bx = viewSize / 2; const by = viewSize - 35;
+
+        if (currentStage === 0) {
+            drawSeed(bx, by - 15);
+        } else if (currentStage === 1) {
+            ctx.strokeStyle = "#689f38"; ctx.lineWidth = 5; ctx.lineCap = "round";
+            ctx.beginPath(); ctx.moveTo(bx, by);
+            ctx.quadraticCurveTo(bx + 12, by - 20, bx, by - 45); ctx.stroke();
+            drawLeaf(bx, by - 45, 0.1, 0.8, 1);
+        } else {
+            const baseLen = (viewSize * 0.15) + (currentStage * 4);
+            const baseW = 2.5 + (currentStage * 1.6);
+            drawBranch(bx, by, baseLen, 0, baseW, 1, currentStage);
+        }
+    }
+
+    window.onload = () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const indexStr = urlParams.get('index');
+        let index = 0;
+        if (indexStr !== null) index = parseInt(indexStr);
+        
+        const clampedIndex = Math.max(0, Math.min(5000, index));
+        idxVal.innerText = index;
+        
+        const progressPercent = (clampedIndex / 5000) * 100;
+        progressFill.style.width = progressPercent + "%";
+
+        currentStage = getStageFromIndex(index);
+        
+        initCanvas();
+        window.addEventListener('resize', initCanvas);
+    };
+</script>
+</body>
+</html>

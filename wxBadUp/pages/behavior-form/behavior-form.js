@@ -43,7 +43,7 @@ Page({
     name: '',
     desc: '',
     colorHex: '#F55F52',
-    behaviorType: -1,
+    behaviorType: 1,
 
     // 编辑模式下保留原值，用于判断是否真的发生修改。
     original: null,
@@ -86,6 +86,9 @@ Page({
   },
 
   selectBehaviorType(event) {
+    if (this.data.mode === 'edit') {
+      return
+    }
     this.setData({ behaviorType: Number(event.currentTarget.dataset.type) === 1 ? 1 : -1 })
   },
 
@@ -140,7 +143,7 @@ Page({
 
     this.setData({ isSaving: true })
     const task = this.data.mode === 'edit'
-      ? api.updateBehavior(user.userId, this.data.behaviorId, name, desc, this.data.colorHex, this.data.behaviorType)
+      ? api.updateBehavior(user.userId, this.data.behaviorId, name, desc, this.data.colorHex)
       : api.addBehavior(user.userId, name, desc, this.data.colorHex, this.data.behaviorType)
 
     task.then(() => {
@@ -159,6 +162,5 @@ Page({
     return original.name === name
       && original.desc === desc
       && original.colorHex === this.data.colorHex
-      && original.behaviorType === this.data.behaviorType
   },
 })

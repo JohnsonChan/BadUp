@@ -1,0 +1,27 @@
+<!-- 生长指数页：用小程序 Canvas 复刻 phpBadUp/yaji.html，避免 web-view 的 HTTP/业务域名限制。 -->
+<view class="page">
+  <navigation-bar title="生长指数" color="#182827" background="#F6FBF8"></navigation-bar>
+
+  <view class="growth-content">
+    <view class="growth-header">
+      <view class="growth-title">种子芽记</view>
+      <view class="growth-desc">{{stageDesc}}</view>
+    </view>
+
+    <view class="canvas-wrap">
+      <canvas type="2d" id="treeCanvas" class="tree-canvas"></canvas>
+    </view>
+
+    <view class="growth-footer">
+      <view class="stage-row">
+        <text class="stage-name">{{stageName}}</text>
+        <text class="index-text">成长指数：<text>{{indexValue}}</text></text>
+      </view>
+      <view class="progress-track">
+        <view class="progress-fill" style="width: {{progressPercent}}%;">
+          <view class="progress-thumb"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

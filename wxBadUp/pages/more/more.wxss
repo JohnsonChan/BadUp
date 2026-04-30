@@ -36,6 +36,14 @@ page {
   border-bottom: 0;
 }
 
+.clickable-row {
+  cursor: pointer;
+}
+
+.row-hover {
+  background: rgba(42, 168, 107, 0.06);
+}
+
 /* 左侧字段名固定宽度，右侧内容自适应。 */
 .row text:first-child {
   width: 210rpx;

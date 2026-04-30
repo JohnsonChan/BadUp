@@ -17,12 +17,15 @@
 
       <!-- 行为好坏选择。 -->
       <view class="section">
-        <view class="label">行为类型</view>
+        <view class="label label-with-tip">
+          <text>行为类型</text>
+          <text wx:if="{{mode === 'edit'}}" class="type-lock-tip">编辑时不可修改</text>
+        </view>
         <view class="type-switch">
           <view
             wx:for="{{behaviorTypes}}"
             wx:key="value"
-            class="type-option {{behaviorType === item.value ? 'selected' : ''}} {{item.value === 1 ? 'good' : 'bad'}}"
+            class="type-option {{behaviorType === item.value ? 'selected' : ''}} {{item.value === 1 ? 'good' : 'bad'}} {{mode === 'edit' ? 'disabled' : ''}}"
             data-type="{{item.value}}"
             bindtap="selectBehaviorType"
           >

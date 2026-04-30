@@ -13,7 +13,7 @@ try {
 
     // LEFT JOIN 保证即使今天没有记录，行为项也会返回，todayCount 为 0。
     $sql = "
-        SELECT b.behaviorId, b.userId, b.behaviorName, b.behaviorDesc, b.colorHex, b.behaviorType, b.sortOrder, b.isActive,
+        SELECT b.behaviorId, b.userId, b.behaviorName, b.behaviorDesc, b.colorHex, b.behaviorType, b.sortOrder,
                IFNULL(SUM(r.countNum), 0) AS todayCount
         FROM bad_Behavior b
         LEFT JOIN bad_BehaviorRecord r
@@ -23,9 +23,9 @@ try {
 
     if ($userId) {
         // 登录用户可以看到系统默认行为和自己创建的行为。
-        $sql .= " WHERE b.isActive = 1 AND (b.userId IS NULL OR b.userId = :userId)";
+        $sql .= " WHERE b.userId IS NULL OR b.userId = :userId";
     } else {
-        $sql .= " WHERE b.isActive = 1 AND b.userId IS NULL";
+        $sql .= " WHERE b.userId IS NULL";
     }
 
     $sql .= " GROUP BY b.behaviorId ORDER BY b.sortOrder ASC, b.behaviorId ASC";
