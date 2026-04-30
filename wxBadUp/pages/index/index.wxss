@@ -170,7 +170,7 @@ page {
 /* 首页标题区。 */
 .hero {
   text-align: center;
-  margin: 12rpx 0 34rpx;
+  margin: 0 0 34rpx;
 }
 
 .hero-title {
@@ -309,7 +309,7 @@ page {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 580rpx;
+  width: 620rpx;
   box-sizing: border-box;
   padding: 34rpx 30rpx 30rpx;
   border-radius: 34rpx;
@@ -323,6 +323,10 @@ page {
   height: 8rpx;
   margin: 0 auto 24rpx;
   border-radius: 999rpx;
+}
+
+.danger-bar {
+  background: #e54d4d;
 }
 
 .dialog-title {
@@ -340,8 +344,17 @@ page {
   line-height: 1.55;
 }
 
-.dialog-message text {
+.dialog-line {
+  display: inline;
+  font-weight: 600;
+}
+
+.dialog-highlight {
   font-weight: 900;
+}
+
+.danger-text {
+  color: #e54d4d;
 }
 
 .dialog-actions {
@@ -373,6 +386,11 @@ page {
 .dialog-btn.danger {
   color: #e54d4d;
   background: #f6eeee;
+}
+
+.dialog-btn.danger-solid {
+  color: #fff;
+  background: #e54d4d;
 }
 
 .dialog-btn.main {

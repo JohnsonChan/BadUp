@@ -3,17 +3,18 @@
 
   <view class="content">
     <!-- 当前登录用户的服务端信息。 -->
-    <view class="section-title">用户信息</view>
+    <view class="section-title">种子信息</view>
     <view class="card">
-      <view class="row"><text>用户ID</text><text>{{user.userId || '-'}}</text></view>
-      <view class="row"><text>注册日期</text><text>{{registerDate}}</text></view>
-      <view class="row"><text>使用平台</text><text>微信小程序</text></view>
-      <view class="row"><text>AppVersion</text><text>{{user.appVersion || '-'}}</text></view>
+      <view class="row"><text>种子编号</text><text>{{user.userId || '-'}}</text></view>
+      <view class="row"><text>生长指数</text><text class="score-value {{behaviorScoreClass}}">{{behaviorScore}}</text></view>
+      <view class="row"><text>播种日期</text><text>{{registerDate}}</text></view>
+      <view class="row"><text>发芽土地</text><text>{{platformName}}</text></view>
     </view>
 
     <!-- 关于我们信息。 -->
-    <view class="section-title">关于我们</view>
+    <view class="section-title">关于芽记</view>
     <view class="card">
+      <view class="row"><text>当前版本</text><text>{{user.appVersion || '-'}}</text></view>
       <view class="row"><text>联系我们</text><text>BooTry</text></view>
       <view class="row"><text>ICP备案信息</text><text>粤ICP备19137866号-3</text></view>
     </view>

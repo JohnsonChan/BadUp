@@ -15,6 +15,23 @@
         <textarea class="textarea" value="{{desc}}" placeholder="写一句提醒自己的描述" maxlength="120" bindinput="onDescInput" />
       </view>
 
+      <!-- 行为好坏选择。 -->
+      <view class="section">
+        <view class="label">行为类型</view>
+        <view class="type-switch">
+          <view
+            wx:for="{{behaviorTypes}}"
+            wx:key="value"
+            class="type-option {{behaviorType === item.value ? 'selected' : ''}} {{item.value === 1 ? 'good' : 'bad'}}"
+            data-type="{{item.value}}"
+            bindtap="selectBehaviorType"
+          >
+            <view class="type-name">{{item.name}}</view>
+            <view class="type-desc">{{item.desc}}</view>
+          </view>
+        </view>
+      </view>
+
       <!-- 颜色选择区。 -->
       <view class="section">
         <view class="label">按钮颜色</view>

@@ -13,7 +13,7 @@ try {
 
     // LEFT JOIN 保证即使今天没有记录，行为项也会返回，todayCount 为 0。
     $sql = "
-        SELECT b.behaviorId, b.userId, b.behaviorName, b.behaviorDesc, b.colorHex, b.sortOrder, b.isActive,
+        SELECT b.behaviorId, b.userId, b.behaviorName, b.behaviorDesc, b.colorHex, b.behaviorType, b.sortOrder, b.isActive,
                IFNULL(SUM(r.countNum), 0) AS todayCount
         FROM bad_Behavior b
         LEFT JOIN bad_BehaviorRecord r

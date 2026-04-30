@@ -90,7 +90,7 @@
         <view class="dialog-bar" style="background: {{pendingRecord.colorHex}};"></view>
         <view class="dialog-title">确认记录</view>
         <view class="dialog-message">
-          确定要记录一次“<text style="color: {{pendingRecord.colorHex}};">{{pendingRecord.behaviorName}}</text>”吗？
+          <text class="dialog-line">确定记录一次“<text class="dialog-highlight" style="color: {{pendingRecord.colorHex}};">{{pendingRecord.behaviorName}}</text>”吗？</text>
         </view>
         <view class="dialog-actions">
           <button class="dialog-btn ghost" bindtap="cancelDialog">取消</button>
@@ -105,11 +105,26 @@
         <view class="dialog-bar" style="background: {{pendingAction.colorHex}};"></view>
         <view class="dialog-title">管理行为项</view>
         <view class="dialog-message">
-          你要编辑还是删除“<text style="color: {{pendingAction.colorHex}};">{{pendingAction.behaviorName}}</text>”？删除会连历史记录一起删除。
+          <text class="dialog-line">编辑或删除“<text class="dialog-highlight" style="color: {{pendingAction.colorHex}};">{{pendingAction.behaviorName}}</text>”？删除会清除历史。</text>
         </view>
         <view class="dialog-actions">
-          <button class="dialog-btn danger" bindtap="deleteBehavior">删除</button>
+          <button class="dialog-btn danger" bindtap="askDeleteBehavior">删除</button>
           <button class="dialog-btn main" style="background: {{pendingAction.colorHex}};" bindtap="editBehavior">进入编辑</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 删除前的二次确认弹窗，避免误删行为和历史记录。 -->
+    <view wx:if="{{pendingDelete}}" class="dialog-mask">
+      <view class="dialog-card">
+        <view class="dialog-bar danger-bar"></view>
+        <view class="dialog-title">确认删除</view>
+        <view class="dialog-message">
+          <text class="dialog-line">删除“<text class="dialog-highlight danger-text">{{pendingDelete.behaviorName}}</text>”会清除历史记录，且不可恢复。</text>
+        </view>
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" bindtap="cancelDialog">取消</button>
+          <button class="dialog-btn danger-solid" bindtap="deleteBehavior">确认删除</button>
         </view>
       </view>
     </view>

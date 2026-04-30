@@ -28,8 +28,10 @@ Page({
     // 两种弹窗状态：
     // pendingRecord -> 点击按钮后的“确认记录”
     // pendingAction -> 长按按钮后的“编辑/删除”
+    // pendingDelete -> 点击删除后的二次确认
     pendingRecord: null,
     pendingAction: null,
+    pendingDelete: null,
 
     // 长按后会顺带触发 tap，这个字段用于屏蔽那一次误触。
     skipNextTapBehaviorId: null,
@@ -164,6 +166,7 @@ Page({
       behaviorCardDesc: this.truncateText(behaviorDesc, behaviorCardDescLimit),
       countRowDesc: this.truncateText(behaviorDesc, countRowDescLimit),
       colorHex: item.colorHex || '#F55F52',
+      behaviorType: Number(item.behaviorType) === 1 ? 1 : -1,
     }
   },
 
@@ -235,6 +238,7 @@ Page({
     this.setData({
       pendingRecord: null,
       pendingAction: null,
+      pendingDelete: null,
     })
   },
 
@@ -263,19 +267,30 @@ Page({
     const behavior = this.data.pendingAction
     if (!behavior) return
 
-    const url = `/pages/behavior-form/behavior-form?mode=edit&behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}`
+    const url = `/pages/behavior-form/behavior-form?mode=edit&behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&type=${behavior.behaviorType}`
     this.setData({ pendingAction: null })
     wx.navigateTo({ url })
   },
 
+  // 删除前先进入二次确认，避免误删历史记录。
+  askDeleteBehavior() {
+    const behavior = this.data.pendingAction
+    if (!behavior) return
+
+    this.setData({
+      pendingAction: null,
+      pendingDelete: behavior,
+    })
+  },
+
   // 删除行为后，重新刷新首页列表。
   deleteBehavior() {
-    const { user, pendingAction } = this.data
-    if (!user || !pendingAction) return
+    const { user, pendingDelete } = this.data
+    if (!user || !pendingDelete) return
 
-    api.deleteBehavior(user.userId, pendingAction.behaviorId)
+    api.deleteBehavior(user.userId, pendingDelete.behaviorId)
       .then(() => {
-        this.setData({ pendingAction: null })
+        this.setData({ pendingDelete: null })
         return this.loadToday()
       })
       .catch((error) => {

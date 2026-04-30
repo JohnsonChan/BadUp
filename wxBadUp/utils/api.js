@@ -71,23 +71,25 @@ function fetchTodayCounts(userId, recordDate) {
 }
 
 // 新增一个行为项。
-function addBehavior(userId, behaviorName, behaviorDesc, colorHex) {
+function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType) {
   return request('bad_BehaviorInsert.php', {
     userId,
     behaviorName,
     behaviorDesc,
     colorHex,
+    behaviorType,
   }).then((res) => res.data)
 }
 
 // 编辑已有行为项。
-function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex) {
+function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex, behaviorType) {
   return request('bad_BehaviorUpdate.php', {
     userId,
     behaviorId,
     behaviorName,
     behaviorDesc,
     colorHex,
+    behaviorType,
   }).then((res) => res.data)
 }
 
@@ -127,6 +129,12 @@ function fetchDayStats(behaviorId, recordDate) {
     .then((res) => res.list || [])
 }
 
+// 拉取用户累计行为分。
+function fetchUserBehaviorScore(userId) {
+  return request('bad_UserBehaviorScore.php', { userId })
+    .then((res) => res.data || { behaviorScore: 0, totalCount: 0 })
+}
+
 module.exports = {
   baseURL,
   loginOrRegister,
@@ -138,4 +146,5 @@ module.exports = {
   fetchYearStats,
   fetchMonthStats,
   fetchDayStats,
+  fetchUserBehaviorScore,
 }

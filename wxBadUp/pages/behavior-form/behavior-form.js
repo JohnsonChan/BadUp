@@ -30,6 +30,10 @@ const primaryPalette = [
   { type: 'more', hex: '__more__', name: '更多选择' },
 ]
 const primaryColorHexes = fullPalette.slice(0, 7).map((item) => item.hex)
+const behaviorTypes = [
+  { value: 1, name: '好行为', desc: '记录一次 +1 分' },
+  { value: -1, name: '坏行为', desc: '记录一次 -10 分' },
+]
 
 Page({
   data: {
@@ -39,9 +43,11 @@ Page({
     name: '',
     desc: '',
     colorHex: '#F55F52',
+    behaviorType: -1,
 
     // 编辑模式下保留原值，用于判断是否真的发生修改。
     original: null,
+    behaviorTypes,
     palette: primaryPalette,
     fullPalette,
     isMoreColorsVisible: false,
@@ -56,13 +62,15 @@ Page({
       const name = decodeURIComponent(options.name || '')
       const desc = decodeURIComponent(options.desc || '')
       const colorHex = decodeURIComponent(options.color || '#F55F52')
+      const behaviorType = Number(options.type) === 1 ? 1 : -1
       this.setData({
         mode: 'edit',
         behaviorId,
         name,
         desc,
         colorHex,
-        original: { name, desc, colorHex },
+        behaviorType,
+        original: { name, desc, colorHex, behaviorType },
         isMoreColorSelected: !primaryColorHexes.includes(colorHex),
       })
     }
@@ -75,6 +83,10 @@ Page({
 
   onDescInput(event) {
     this.setData({ desc: event.detail.value })
+  },
+
+  selectBehaviorType(event) {
+    this.setData({ behaviorType: Number(event.currentTarget.dataset.type) === 1 ? 1 : -1 })
   },
 
   // 选择颜色时，预览卡片会即时变化；更多入口会打开完整颜色板。
@@ -128,8 +140,8 @@ Page({
 
     this.setData({ isSaving: true })
     const task = this.data.mode === 'edit'
-      ? api.updateBehavior(user.userId, this.data.behaviorId, name, desc, this.data.colorHex)
-      : api.addBehavior(user.userId, name, desc, this.data.colorHex)
+      ? api.updateBehavior(user.userId, this.data.behaviorId, name, desc, this.data.colorHex, this.data.behaviorType)
+      : api.addBehavior(user.userId, name, desc, this.data.colorHex, this.data.behaviorType)
 
     task.then(() => {
       wx.navigateBack()
@@ -144,6 +156,9 @@ Page({
   hasNoChanges(name, desc) {
     const original = this.data.original
     if (!original) return false
-    return original.name === name && original.desc === desc && original.colorHex === this.data.colorHex
+    return original.name === name
+      && original.desc === desc
+      && original.colorHex === this.data.colorHex
+      && original.behaviorType === this.data.behaviorType
   },
 })

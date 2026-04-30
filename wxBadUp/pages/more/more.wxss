@@ -49,6 +49,20 @@ page {
   font-weight: 700;
 }
 
+.score-value {
+  color: #1f2d2b;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.score-value.positive {
+  color: #2aa86b;
+}
+
+.score-value.negative {
+  color: #d84f49;
+}
+
 .muted {
   color: #7a8784;
   font-size: 27rpx;

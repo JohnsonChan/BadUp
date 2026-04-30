@@ -11,15 +11,16 @@ try {
 
     $stmt = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, behaviorName, behaviorDesc, colorHex, sortOrder, isActive, createdAt)
+        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, isActive, createdAt)
         VALUES
-        (:userId, :behaviorName, :behaviorDesc, :colorHex, :sortOrder, :isActive, :createdAt)
+        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :isActive, :createdAt)
     ");
     $stmt->execute([
         ':userId' => isset($data['userId']) && $data['userId'] !== '' ? intval($data['userId']) : null,
         ':behaviorName' => trim($data['behaviorName']),
         ':behaviorDesc' => isset($data['behaviorDesc']) ? trim($data['behaviorDesc']) : '',
         ':colorHex' => trim($data['colorHex']),
+        ':behaviorType' => isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : -1,
         ':sortOrder' => isset($data['sortOrder']) ? intval($data['sortOrder']) : 0,
         ':isActive' => isset($data['isActive']) ? intval($data['isActive']) : 1,
         ':createdAt' => $createdAt

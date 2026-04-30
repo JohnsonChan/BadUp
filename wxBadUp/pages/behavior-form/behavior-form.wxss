@@ -9,20 +9,20 @@ page {
 }
 
 .content {
-  padding: 28rpx 30rpx 70rpx;
+  padding: 20rpx 30rpx 54rpx;
 }
 
 /* 表单卡片区块。 */
 .section {
-  margin-bottom: 28rpx;
-  padding: 28rpx;
+  margin-bottom: 16rpx;
+  padding: 22rpx 28rpx;
   border-radius: 30rpx;
   background: #fff;
   box-shadow: 0 16rpx 38rpx rgba(30, 54, 50, 0.06);
 }
 
 .label {
-  margin-bottom: 18rpx;
+  margin-bottom: 12rpx;
   color: #1f2d2b;
   font-size: 28rpx;
   font-weight: 800;
@@ -48,6 +48,54 @@ page {
   min-height: 140rpx;
   padding: 18rpx 22rpx;
   line-height: 1.35;
+}
+
+/* 行为类型选择。 */
+.type-switch {
+  display: flex;
+  gap: 16rpx;
+}
+
+.type-option {
+  flex: 1;
+  padding: 20rpx 18rpx;
+  border-radius: 22rpx;
+  border: 2rpx solid transparent;
+  background: #f4f7f6;
+  box-sizing: border-box;
+}
+
+.type-option.selected.good {
+  border-color: #2aa86b;
+  background: rgba(42, 168, 107, 0.10);
+}
+
+.type-option.selected.bad {
+  border-color: #e15a52;
+  background: rgba(225, 90, 82, 0.10);
+}
+
+.type-name {
+  color: #1f2d2b;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.type-desc {
+  margin-top: 8rpx;
+  color: #7a8784;
+  font-size: 21rpx;
+  font-weight: 600;
+}
+
+.type-option.selected.good .type-name,
+.type-option.selected.good .type-desc {
+  color: #1d8c58;
+}
+
+.type-option.selected.bad .type-name,
+.type-option.selected.bad .type-desc {
+  color: #d84f49;
 }
 
 /* 颜色面板。 */

@@ -23,25 +23,18 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $createdAt = date('Y-m-d H:i:s');
     $platform = trim((string)$platform);
 
-    if ($platform === 'WeChatMiniProgram') {
-        $defaults = [
-            ['熬夜', '记录一次睡太晚', '#6C7EF7', 10],
-            ['吃太饱', '记录一次吃撑了', '#F9B536', 20]
+    $defaults = [
+            ['运动', '记录一次没忍住', '#F55F52', -1, 10],
+            ['刷视频', '记录一次沉迷短视频', '#31B3C5', -1, 20],
+            ['熬夜', '记录一次睡太晚', '#6C7EF7', -1, 30],
+            ['吃太饱', '记录一次吃撑了', '#F9B536', -1, 40]
         ];
-    } else {
-        $defaults = [
-            ['撸管', '记录一次没忍住', '#F55F52', 10],
-            ['刷视频', '记录一次沉迷短视频', '#31B3C5', 20],
-            ['熬夜', '记录一次睡太晚', '#6C7EF7', 30],
-            ['吃太饱', '记录一次吃撑了', '#F9B536', 40]
-        ];
-    }
 
     $insert = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, behaviorName, behaviorDesc, colorHex, sortOrder, isActive, createdAt)
+        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, isActive, createdAt)
         VALUES
-        (:userId, :behaviorName, :behaviorDesc, :colorHex, :sortOrder, 1, :createdAt)
+        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, 1, :createdAt)
     ");
 
     foreach ($defaults as $item) {
@@ -50,7 +43,8 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
             ':behaviorName' => $item[0],
             ':behaviorDesc' => $item[1],
             ':colorHex' => $item[2],
-            ':sortOrder' => $item[3],
+            ':behaviorType' => badNormalizeBehaviorType($item[3]),
+            ':sortOrder' => $item[4],
             ':createdAt' => $createdAt
         ]);
     }

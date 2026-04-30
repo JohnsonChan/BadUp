@@ -26,7 +26,8 @@ try {
         UPDATE bad_Behavior
            SET behaviorName = :behaviorName,
                behaviorDesc = :behaviorDesc,
-               colorHex = :colorHex
+               colorHex = :colorHex,
+               behaviorType = :behaviorType
          WHERE behaviorId = :behaviorId
          LIMIT 1
     ");
@@ -35,6 +36,7 @@ try {
         ':behaviorName' => trim($data['behaviorName']),
         ':behaviorDesc' => isset($data['behaviorDesc']) ? trim($data['behaviorDesc']) : '',
         ':colorHex' => trim($data['colorHex']),
+        ':behaviorType' => isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : badNormalizeBehaviorType($behavior['behaviorType']),
         ':behaviorId' => $behaviorId
     ]);
 
