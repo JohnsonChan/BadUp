@@ -11,22 +11,37 @@ struct SplashView: View {
             ZStack {
                 LinearGradient(
                     colors: [
-                        Color(red: 0.06, green: 0.10, blue: 0.19),
-                        Color(red: 0.24, green: 0.10, blue: 0.16),
-                        Color(red: 0.40, green: 0.14, blue: 0.09)
+                        Color(red: 0.98, green: 1.00, blue: 0.98),
+                        Color(red: 0.93, green: 0.98, blue: 0.94),
+                        Color(red: 0.85, green: 0.95, blue: 0.89)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
 
-                VStack(spacing: 14) {
-                    Text("坏是做尽")
-                        .font(.system(size: 42, weight: .heavy))
-                        .foregroundStyle(.white)
+                Circle()
+                    .fill(Color(red: 0.34, green: 0.78, blue: 0.50).opacity(0.16))
+                    .frame(width: 180, height: 180)
+                    .blur(radius: 14)
+                    .position(x: 32, y: proxy.size.height * 0.20)
 
-                    Text("记录坏习惯，然后少做一点")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.78))
+                Circle()
+                    .fill(Color(red: 0.09, green: 0.63, blue: 0.52).opacity(0.14))
+                    .frame(width: 170, height: 170)
+                    .blur(radius: 14)
+                    .position(x: proxy.size.width - 24, y: proxy.size.height * 0.78)
+
+                VStack(spacing: 14) {
+                    Text("芽记")
+                        .font(.system(size: 42, weight: .heavy))
+                        .foregroundStyle(Color(red: 0.09, green: 0.23, blue: 0.18))
+
+                    VStack(spacing: 5) {
+                        Text("记录好习惯，然后成长一点")
+                        Text("记录坏习惯，然后少做一点")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.09, green: 0.23, blue: 0.18).opacity(0.72))
                 }
                 .frame(maxWidth: .infinity)
                 .position(x: proxy.size.width / 2, y: proxy.size.height * 0.42)
@@ -35,14 +50,14 @@ struct SplashView: View {
                     // 三种状态：登录中、登录失败、等待 onAppear 开始登录。
                     if session.isLoading {
                         ProgressView()
-                            .tint(.white)
+                            .tint(Color(red: 0.22, green: 0.63, blue: 0.40))
                         Text("正在登录…")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(Color(red: 0.13, green: 0.31, blue: 0.25))
                     } else if let error = session.errorMessage {
                         Text(error)
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color(red: 0.13, green: 0.31, blue: 0.25))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 18)
 
@@ -50,11 +65,11 @@ struct SplashView: View {
                             session.retry()
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(.white.opacity(0.92))
-                        .foregroundStyle(.black)
+                        .tint(Color(red: 0.24, green: 0.71, blue: 0.43))
+                        .foregroundStyle(.white)
                     } else {
                         ProgressView()
-                            .tint(.white)
+                            .tint(Color(red: 0.22, green: 0.63, blue: 0.40))
                     }
                 }
                 .frame(maxWidth: .infinity)

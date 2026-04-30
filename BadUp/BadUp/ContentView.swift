@@ -8,6 +8,7 @@
 import SwiftUI
 import Combine
 import SQLite3
+import UIKit
 
 // 更丰富的颜色板项。
 // 这些颜色会在“更多颜色”弹层中展示。
@@ -19,7 +20,7 @@ private struct ColorPaletteItem: Identifiable, Hashable {
     var id: String { hex }
 }
 
-// 可选的行为颜色。
+// 可选的习惯颜色。
 // 这里用预设颜色而不是自由取色，能让按钮和统计页风格保持整齐。
 private enum BehaviorColorOption: String, CaseIterable, Identifiable {
     case coral = "#F55F52"
@@ -28,6 +29,7 @@ private enum BehaviorColorOption: String, CaseIterable, Identifiable {
     case blue = "#6C7EF7"
     case green = "#43C77A"
     case pink = "#F56EA4"
+    case purple = "#8C5CF6"
 
     var id: String { rawValue }
 
@@ -45,6 +47,8 @@ private enum BehaviorColorOption: String, CaseIterable, Identifiable {
             return Color(red: 0.26, green: 0.78, blue: 0.48)
         case .pink:
             return Color(red: 0.96, green: 0.43, blue: 0.64)
+        case .purple:
+            return Color(red: 0.55, green: 0.36, blue: 0.96)
         }
     }
 
@@ -56,11 +60,46 @@ private enum BehaviorColorOption: String, CaseIterable, Identifiable {
         case .blue: return "钴蓝"
         case .green: return "薄荷绿"
         case .pink: return "粉红"
+        case .purple: return "紫罗兰"
         }
     }
 
     static func from(hex: String) -> BehaviorColorOption {
         BehaviorColorOption(rawValue: hex) ?? .coral
+    }
+}
+
+// 习惯类型。
+// 好习惯记录一次 +1 分，坏习惯记录一次 -10 分；分值由服务端在写入记录时固化。
+private enum BehaviorKind: Int, CaseIterable, Identifiable, Hashable {
+    case good = 1
+    case bad = -1
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .good: return "好习惯"
+        case .bad: return "坏习惯"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .good: return "记录一次 +1 分"
+        case .bad: return "记录一次 -10 分"
+        }
+    }
+
+    var tintColor: Color {
+        switch self {
+        case .good: return Color(red: 0.26, green: 0.78, blue: 0.48)
+        case .bad: return Color(red: 0.96, green: 0.37, blue: 0.32)
+        }
+    }
+
+    static func fromServerValue(_ value: Int?) -> BehaviorKind {
+        value == 1 ? .good : .bad
     }
 }
 
@@ -87,14 +126,16 @@ private extension Array where Element == ColorPaletteItem {
     ]
 }
 
-// 行为项模型。
-// 默认行为和用户新增行为都统一走这个结构。
+// 习惯项模型。
+// 默认习惯和用户新增习惯都统一走这个结构。
 private struct BehaviorItem: Identifiable, Hashable {
     let id: Int64
     let userId: Int?
     let name: String
     let detail: String
     let colorHex: String
+    var behaviorKind: BehaviorKind = .bad
+    var sortOrder: Int = 0
 
     var tintColor: Color {
         if let paletteItem = Array.extendedBehaviorPalette.first(where: { $0.hex == colorHex }) {
@@ -105,12 +146,22 @@ private struct BehaviorItem: Identifiable, Hashable {
 }
 
 private extension BehaviorItem {
-    init(serverBehaviorId: Int64, userId: Int?, behaviorName: String, behaviorDesc: String?, colorHex: String) {
+    init(
+        serverBehaviorId: Int64,
+        userId: Int?,
+        behaviorName: String,
+        behaviorDesc: String?,
+        colorHex: String,
+        behaviorType: Int?,
+        sortOrder: Int?
+    ) {
         self.id = serverBehaviorId
         self.userId = userId
         self.name = behaviorName
         self.detail = behaviorDesc ?? ""
         self.colorHex = colorHex
+        self.behaviorKind = BehaviorKind.fromServerValue(behaviorType)
+        self.sortOrder = sortOrder ?? 0
     }
 }
 
@@ -148,7 +199,7 @@ private struct HourSummary: Identifiable {
 }
 
 // SQLite 数据库封装。
-// 这里同时管理“行为表”和“记录表”。
+// 这里同时管理“习惯表”和“记录表”。
 private final class BehaviorDatabase {
     private var db: OpaquePointer?
 
@@ -191,7 +242,7 @@ private final class BehaviorDatabase {
         sqlite3_close(db)
     }
 
-    // 读取所有行为项，按创建顺序展示。
+    // 读取所有习惯项，按创建顺序展示。
     func fetchBehaviors() -> [BehaviorItem] {
         let sql = """
         SELECT id, name, detail, color_hex
@@ -219,7 +270,7 @@ private final class BehaviorDatabase {
         return items
     }
 
-    // 新增自定义行为项。
+    // 新增自定义习惯项。
     func addBehavior(name: String, detail: String, colorHex: String) -> Bool {
         let sql = """
         INSERT INTO behaviors (name, detail, color_hex)
@@ -241,8 +292,8 @@ private final class BehaviorDatabase {
         return sqlite3_step(statement) == SQLITE_DONE
     }
 
-    // 更新行为项。
-    // 因为本地记录表当前用行为名称做关联，所以改名时要同步更新历史记录里的 behavior_type。
+    // 更新习惯项。
+    // 因为本地记录表当前用习惯名称做关联，所以改名时要同步更新历史记录里的 behavior_type。
     func updateBehavior(id: Int64, name: String, detail: String, colorHex: String) -> Bool {
         guard let oldBehavior = fetchBehaviors().first(where: { $0.id == id }) else {
             return false
@@ -297,7 +348,7 @@ private final class BehaviorDatabase {
         return sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK
     }
 
-    // 删除行为项，同时把它的历史记录一并删除。
+    // 删除习惯项，同时把它的历史记录一并删除。
     func deleteBehavior(id: Int64) -> Bool {
         guard let behavior = fetchBehaviors().first(where: { $0.id == id }) else {
             return false
@@ -330,7 +381,7 @@ private final class BehaviorDatabase {
         return behaviorDeleted
     }
 
-    // 写入一次行为记录。
+    // 写入一次习惯记录。
     func insertRecord(for behavior: BehaviorItem, on date: Date = Date()) {
         let sql = """
         INSERT INTO behavior_records (record_date, recorded_at, behavior_type, count)
@@ -356,7 +407,7 @@ private final class BehaviorDatabase {
         }
     }
 
-    // 查询今天所有行为的次数。
+    // 查询今天所有习惯的次数。
     func fetchTodayCounts(for behaviors: [BehaviorItem], on date: Date = Date()) -> [DailyBehaviorCount] {
         let sql = """
         SELECT behavior_type, SUM(count)
@@ -539,13 +590,12 @@ private final class BehaviorDatabase {
         sqlite3_exec(db, sql, nil, nil, nil)
     }
 
-    // 首次运行时写入默认的 4 个行为项。
+    // 首次运行时写入默认的习惯项。
     private func seedDefaultBehaviors() {
         let defaults: [(String, String, String)] = [
-            ("撸管", "记录冲动型坏习惯", BehaviorColorOption.coral.rawValue),
-            ("刷视频", "记录无意识刷短视频", BehaviorColorOption.orange.rawValue),
-            ("熬夜", "记录晚睡和拖延入睡", BehaviorColorOption.cyan.rawValue),
-            ("吃太饱", "记录暴食或吃撑的情况", BehaviorColorOption.blue.rawValue)
+            ("运动", "记录一次运动", BehaviorColorOption.green.rawValue),
+            ("学习", "记录一次学习", BehaviorColorOption.cyan.rawValue),
+            ("熬夜", "记录一次睡太晚", BehaviorColorOption.blue.rawValue)
         ]
 
         for item in defaults {
@@ -572,7 +622,7 @@ private final class BehaviorDatabase {
     }
 }
 
-// 服务器行为接口封装。
+// 服务器习惯接口封装。
 // 页面层只和这个服务交互，不直接拼 PHP 接口参数。
 private final class RemoteBehaviorService {
     static let shared = RemoteBehaviorService()
@@ -622,14 +672,15 @@ private final class RemoteBehaviorService {
         }
     }
 
-    func addBehavior(userId: Int, name: String, detail: String, colorHex: String) async throws {
+    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind) async throws {
         let _: ServerDataResponse<ServerBehavior> = try await post(
             "bad_BehaviorInsert.php",
             payload: [
                 "userId": userId,
                 "behaviorName": name,
                 "behaviorDesc": detail,
-                "colorHex": colorHex
+                "colorHex": colorHex,
+                "behaviorType": behaviorKind.rawValue
             ]
         )
     }
@@ -639,7 +690,7 @@ private final class RemoteBehaviorService {
             "bad_BehaviorUpdate.php",
             payload: [
                 "userId": userId,
-                "behaviorId": behavior.id,
+                "behaviorId": Int(behavior.id),
                 "behaviorName": name,
                 "behaviorDesc": detail,
                 "colorHex": colorHex
@@ -652,7 +703,18 @@ private final class RemoteBehaviorService {
             "bad_BehaviorDelete.php",
             payload: [
                 "userId": userId,
-                "behaviorId": behavior.id
+                "behaviorId": Int(behavior.id)
+            ]
+        )
+    }
+
+    func updateBehaviorSort(userId: Int, behaviors: [BehaviorItem]) async throws {
+        let behaviorIds = behaviors.map { Int($0.id) }
+        let _: ServerDataResponse<ServerSortUpdate> = try await post(
+            "bad_BehaviorSortUpdate.php",
+            payload: [
+                "userId": userId,
+                "behaviorIds": behaviorIds
             ]
         )
     }
@@ -662,7 +724,7 @@ private final class RemoteBehaviorService {
             "bad_BehaviorRecordInsert.php",
             payload: [
                 "userId": userId,
-                "behaviorId": behavior.id,
+                "behaviorId": Int(behavior.id),
                 "recordDate": dateFormatter.string(from: date),
                 "recordedAt": dateTimeFormatter.string(from: date),
                 "countNum": 1,
@@ -675,7 +737,7 @@ private final class RemoteBehaviorService {
         let response: ServerListResponse<ServerMonthSummary> = try await post(
             "bad_BehaviorYearStats.php",
             payload: [
-                "behaviorId": behavior.id,
+                "behaviorId": Int(behavior.id),
                 "year": year
             ]
         )
@@ -701,7 +763,7 @@ private final class RemoteBehaviorService {
         let response: ServerListResponse<ServerDaySummary> = try await post(
             "bad_BehaviorMonthStats.php",
             payload: [
-                "behaviorId": behavior.id,
+                "behaviorId": Int(behavior.id),
                 "year": year,
                 "month": month
             ]
@@ -722,7 +784,7 @@ private final class RemoteBehaviorService {
         let response: ServerListResponse<ServerHourSummary> = try await post(
             "bad_BehaviorDayStats.php",
             payload: [
-                "behaviorId": behavior.id,
+                "behaviorId": Int(behavior.id),
                 "recordDate": dateFormatter.string(from: date)
             ]
         )
@@ -731,6 +793,16 @@ private final class RemoteBehaviorService {
             counts[item.hourNum.intValue] = item.totalCount.intValue
         }
         return (0...23).map { HourSummary(hour: $0, count: counts[$0, default: 0]) }
+    }
+
+    func fetchUserBehaviorScore(userId: Int) async throws -> UserBehaviorScore {
+        let response: ServerDataResponse<UserBehaviorScore> = try await post(
+            "bad_UserBehaviorScore.php",
+            payload: [
+                "userId": userId
+            ]
+        )
+        return response.data ?? UserBehaviorScore(behaviorScore: 0, totalCount: 0)
     }
 
     private func post<T: Decodable>(_ endpoint: String, payload: [String: Any]) async throws -> T {
@@ -804,6 +876,8 @@ private struct ServerBehavior: Decodable {
     let behaviorName: String
     let behaviorDesc: String?
     let colorHex: String
+    let behaviorType: LossyInt?
+    let sortOrder: LossyInt?
 
     var behaviorItem: BehaviorItem {
         BehaviorItem(
@@ -811,7 +885,9 @@ private struct ServerBehavior: Decodable {
             userId: userId?.intValue,
             behaviorName: behaviorName,
             behaviorDesc: behaviorDesc,
-            colorHex: colorHex
+            colorHex: colorHex,
+            behaviorType: behaviorType?.intValue,
+            sortOrder: sortOrder?.intValue
         )
     }
 }
@@ -822,6 +898,8 @@ private struct ServerBehaviorToday: Decodable {
     let behaviorName: String
     let behaviorDesc: String?
     let colorHex: String
+    let behaviorType: LossyInt?
+    let sortOrder: LossyInt?
     let todayCount: LossyInt
 
     var behaviorItem: BehaviorItem {
@@ -830,8 +908,46 @@ private struct ServerBehaviorToday: Decodable {
             userId: userId?.intValue,
             behaviorName: behaviorName,
             behaviorDesc: behaviorDesc,
-            colorHex: colorHex
+            colorHex: colorHex,
+            behaviorType: behaviorType?.intValue,
+            sortOrder: sortOrder?.intValue
         )
+    }
+}
+
+private struct ServerSortUpdate: Decodable {
+    let updated: LossyInt?
+}
+
+private struct UserBehaviorScore: Decodable {
+    let behaviorScore: Int
+    let totalCount: Int
+
+    enum CodingKeys: String, CodingKey {
+        case behaviorScore
+        case totalCount
+    }
+
+    init(behaviorScore: Int, totalCount: Int) {
+        self.behaviorScore = behaviorScore
+        self.totalCount = totalCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        func decodeInt(_ key: CodingKeys) -> Int {
+            if let intValue = try? container.decode(Int.self, forKey: key) {
+                return intValue
+            }
+            if let stringValue = try? container.decode(String.self, forKey: key) {
+                return Int(stringValue) ?? 0
+            }
+            return 0
+        }
+
+        self.behaviorScore = decodeInt(.behaviorScore)
+        self.totalCount = decodeInt(.totalCount)
     }
 }
 
@@ -851,12 +967,13 @@ private struct ServerHourSummary: Decodable {
 }
 
 @MainActor
-// 首页视图模型：负责行为列表和今天统计。
+// 首页视图模型：负责习惯列表和今天统计。
 private final class ContentViewModel: ObservableObject {
     @Published var behaviors: [BehaviorItem] = []
     @Published var todayCounts: [DailyBehaviorCount] = []
     @Published var addBehaviorErrorMessage: String?
     @Published var isLoading = false
+    @Published var didLoadInitialData = false
 
     private let remoteService = RemoteBehaviorService.shared
 
@@ -868,6 +985,7 @@ private final class ContentViewModel: ObservableObject {
             let counts = try await remoteService.fetchTodayCounts(userId: userId)
             todayCounts = counts
             behaviors = counts.map(\.behavior)
+            didLoadInitialData = true
             addBehaviorErrorMessage = nil
         } catch {
             addBehaviorErrorMessage = readableMessage(prefix: "加载失败", error: error)
@@ -883,17 +1001,17 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
-    func addBehavior(userId: Int, name: String, detail: String, colorHex: String) async -> Bool {
+    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedName.isEmpty else {
-            addBehaviorErrorMessage = "行为名称不能为空"
+            addBehaviorErrorMessage = "习惯名称不能为空"
             return false
         }
 
         if behaviors.contains(where: { $0.name == trimmedName }) {
-            addBehaviorErrorMessage = "已经存在同名行为，请换一个名称"
+            addBehaviorErrorMessage = "这个习惯名称已经存在，请换一个名称"
             return false
         }
 
@@ -902,7 +1020,8 @@ private final class ContentViewModel: ObservableObject {
                 userId: userId,
                 name: trimmedName,
                 detail: trimmedDetail,
-                colorHex: colorHex
+                colorHex: colorHex,
+                behaviorKind: behaviorKind
             )
             addBehaviorErrorMessage = nil
             await loadAll(userId: userId)
@@ -918,12 +1037,12 @@ private final class ContentViewModel: ObservableObject {
         let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedName.isEmpty else {
-            addBehaviorErrorMessage = "行为名称不能为空"
+            addBehaviorErrorMessage = "习惯名称不能为空"
             return false
         }
 
         if behaviors.contains(where: { $0.id != behavior.id && $0.name == trimmedName }) {
-            addBehaviorErrorMessage = "已经存在同名行为，请换一个名称"
+            addBehaviorErrorMessage = "这个习惯名称已经存在，请换一个名称"
             return false
         }
 
@@ -944,6 +1063,34 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
+    func moveBehavior(from sourceIndex: Int, to destinationIndex: Int, userId: Int) async {
+        guard behaviors.indices.contains(sourceIndex), behaviors.indices.contains(destinationIndex), sourceIndex != destinationIndex else {
+            return
+        }
+
+        let originalBehaviors = behaviors
+        let originalCounts = todayCounts
+
+        var movedBehaviors = behaviors
+        let item = movedBehaviors.remove(at: sourceIndex)
+        movedBehaviors.insert(item, at: destinationIndex)
+
+        let countById = Dictionary(uniqueKeysWithValues: todayCounts.map { ($0.behavior.id, $0.count) })
+        behaviors = movedBehaviors
+        todayCounts = movedBehaviors.map { behavior in
+            DailyBehaviorCount(behavior: behavior, count: countById[behavior.id, default: 0])
+        }
+
+        do {
+            try await remoteService.updateBehaviorSort(userId: userId, behaviors: movedBehaviors)
+            addBehaviorErrorMessage = nil
+        } catch {
+            behaviors = originalBehaviors
+            todayCounts = originalCounts
+            addBehaviorErrorMessage = readableMessage(prefix: "排序保存失败", error: error)
+        }
+    }
+
     func deleteBehavior(_ behavior: BehaviorItem, userId: Int) async {
         do {
             try await remoteService.deleteBehavior(userId: userId, behavior: behavior)
@@ -955,6 +1102,13 @@ private final class ContentViewModel: ObservableObject {
 
     private func readableMessage(prefix: String, error: Error) -> String {
         if let apiError = error as? APIClientError {
+            let description = apiError.localizedDescription
+            if description.contains("Integrity constraint")
+                || description.contains("Duplicate")
+                || description.contains("DuplicateBehaviorName")
+                || description.contains("这个习惯名称已经存在") {
+                return "\(prefix)：这个习惯名称已经存在，请换一个名称"
+            }
             return "\(prefix)：\(apiError.localizedDescription)"
         }
         return "\(prefix)：\(error.localizedDescription)"
@@ -1041,6 +1195,7 @@ struct ContentView: View {
     @State private var pendingBehavior: BehaviorItem?
     @State private var isPresentingAddBehavior = false
     @State private var behaviorPendingDeletion: BehaviorItem?
+    @State private var behaviorPendingDeleteConfirmation: BehaviorItem?
     @State private var behaviorPendingEditing: BehaviorItem?
 
     private var currentUserId: Int? {
@@ -1057,14 +1212,8 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            HomeContentView(
-                dateText: dateText,
-                behaviors: viewModel.behaviors,
-                todayCounts: viewModel.todayCounts,
-                onBehaviorTap: beginRecord,
-                onBehaviorLongPress: beginBehaviorAction
-            )
-            .navigationTitle("坏是做尽")
+            homeBody
+            .navigationTitle("芽记")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
             .task(id: currentUserId) {
@@ -1078,6 +1227,25 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white.opacity(0.001))
         .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var homeBody: some View {
+        if viewModel.didLoadInitialData {
+            HomeContentView(
+                dateText: dateText,
+                behaviors: viewModel.behaviors,
+                todayCounts: viewModel.todayCounts,
+                onBehaviorTap: beginRecord,
+                onBehaviorLongPress: beginBehaviorAction,
+                onBehaviorMove: moveBehavior
+            )
+        } else {
+            HomeLoadingView(
+                errorMessage: viewModel.addBehaviorErrorMessage,
+                retryAction: retryLoadHome
+            )
+        }
     }
 
     @ToolbarContentBuilder
@@ -1107,7 +1275,8 @@ struct ContentView: View {
             isPresentingAddBehavior: $isPresentingAddBehavior,
             behaviorPendingEditing: $behaviorPendingEditing,
             pendingBehavior: $pendingBehavior,
-            behaviorPendingDeletion: $behaviorPendingDeletion
+            behaviorPendingDeletion: $behaviorPendingDeletion,
+            behaviorPendingDeleteConfirmation: $behaviorPendingDeleteConfirmation
         )
     }
 
@@ -1122,6 +1291,71 @@ struct ContentView: View {
             behaviorPendingDeletion = behavior
         }
     }
+
+    private func moveBehavior(from sourceIndex: Int, to destinationIndex: Int) {
+        guard let currentUserId else {
+            return
+        }
+
+        Task {
+            await viewModel.moveBehavior(from: sourceIndex, to: destinationIndex, userId: currentUserId)
+        }
+    }
+
+    private func retryLoadHome() {
+        guard let currentUserId else {
+            return
+        }
+
+        Task {
+            await viewModel.loadAll(userId: currentUserId)
+        }
+    }
+}
+
+// 首页首屏数据加载完成前的占位页。
+// 避免登录成功后先渲染空首页，再突然出现习惯列表。
+private struct HomeLoadingView: View {
+    let errorMessage: String?
+    let retryAction: () -> Void
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+
+            if let errorMessage {
+                Image(systemName: "leaf.circle")
+                    .font(.system(size: 44))
+                    .foregroundStyle(Color(red: 0.23, green: 0.56, blue: 0.36))
+
+                Text("加载首页失败")
+                    .font(.headline)
+
+                Text(errorMessage)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 26)
+
+                Button("重试") {
+                    retryAction()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color(red: 0.23, green: 0.56, blue: 0.36))
+            } else {
+                ProgressView()
+                    .tint(Color(red: 0.23, green: 0.56, blue: 0.36))
+
+                Text("正在加载习惯…")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.96, green: 0.99, blue: 0.97))
+    }
 }
 
 // 首页主体滚动内容。
@@ -1131,6 +1365,10 @@ private struct HomeContentView: View {
     let todayCounts: [DailyBehaviorCount]
     let onBehaviorTap: (BehaviorItem) -> Void
     let onBehaviorLongPress: (BehaviorItem) -> Void
+    let onBehaviorMove: (Int, Int) -> Void
+
+    private let estimatedRowHeight: CGFloat = 86
+    private let minimumSortDragDistance: CGFloat = 28
 
     var body: some View {
         ScrollView {
@@ -1150,15 +1388,35 @@ private struct HomeContentView: View {
 
     private var behaviorButtonList: some View {
         VStack(spacing: 12) {
-            ForEach(behaviors) { behavior in
+            ForEach(Array(behaviors.enumerated()), id: \.element.id) { index, behavior in
                 BehaviorButtonRow(behavior: behavior) {
                     onBehaviorTap(behavior)
                 } onLongPress: {
                     onBehaviorLongPress(behavior)
+                } onLongDragEnd: { translationHeight in
+                    moveBehavior(index: index, translationHeight: translationHeight)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func moveBehavior(index: Int, translationHeight: CGFloat) {
+        guard abs(translationHeight) >= minimumSortDragDistance else {
+            if behaviors.indices.contains(index) {
+                onBehaviorLongPress(behaviors[index])
+            }
+            return
+        }
+
+        let stepCount = max(1, Int((abs(translationHeight) / estimatedRowHeight).rounded(.up)))
+        let step = translationHeight > 0 ? stepCount : -stepCount
+        let targetIndex = min(max(index + step, 0), behaviors.count - 1)
+        if targetIndex != index {
+            onBehaviorMove(index, targetIndex)
+        } else if behaviors.indices.contains(index) {
+            onBehaviorLongPress(behaviors[index])
+        }
     }
 
     private var todayCountList: some View {
@@ -1188,6 +1446,7 @@ private struct HomePresentationModifier: ViewModifier {
     @Binding var behaviorPendingEditing: BehaviorItem?
     @Binding var pendingBehavior: BehaviorItem?
     @Binding var behaviorPendingDeletion: BehaviorItem?
+    @Binding var behaviorPendingDeleteConfirmation: BehaviorItem?
 
     func body(content: Content) -> some View {
         content
@@ -1219,8 +1478,8 @@ private struct HomePresentationModifier: ViewModifier {
                 } else if let behavior = behaviorPendingDeletion {
                     BadUpDialog(
                         tintColor: behavior.tintColor,
-                        title: "管理行为项",
-                        messagePrefix: "你要编辑还是删除",
+                        title: "管理习惯项",
+                        messagePrefix: "编辑或删除",
                         highlightedText: behavior.name,
                         messageSuffix: "？删除会连历史记录一起删除。",
                         primaryTitle: "进入编辑",
@@ -1232,7 +1491,26 @@ private struct HomePresentationModifier: ViewModifier {
                             behaviorPendingDeletion = nil
                         },
                         secondaryAction: {
+                            behaviorPendingDeleteConfirmation = behavior
+                            behaviorPendingDeletion = nil
+                        }
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                } else if let behavior = behaviorPendingDeleteConfirmation {
+                    BadUpDialog(
+                        tintColor: behavior.tintColor,
+                        title: "确认删除",
+                        messagePrefix: "确定删除",
+                        highlightedText: behavior.name,
+                        messageSuffix: "？历史记录也会一起删除。",
+                        primaryTitle: "确认删除",
+                        secondaryTitle: "取消",
+                        primaryRole: .destructive,
+                        primaryAction: {
                             confirmDelete(behavior)
+                        },
+                        secondaryAction: {
+                            behaviorPendingDeleteConfirmation = nil
                         }
                     )
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
@@ -1240,6 +1518,29 @@ private struct HomePresentationModifier: ViewModifier {
             }
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: pendingBehavior)
             .animation(.spring(response: 0.28, dampingFraction: 0.86), value: behaviorPendingDeletion)
+            .animation(.spring(response: 0.28, dampingFraction: 0.86), value: behaviorPendingDeleteConfirmation)
+            .alert(
+                "提示",
+                isPresented: Binding(
+                    get: {
+                        viewModel.didLoadInitialData
+                            && viewModel.addBehaviorErrorMessage != nil
+                            && !isPresentingAddBehavior
+                            && behaviorPendingEditing == nil
+                    },
+                    set: { isPresented in
+                        if !isPresented {
+                            viewModel.addBehaviorErrorMessage = nil
+                        }
+                    }
+                )
+            ) {
+                Button("知道了", role: .cancel) {
+                    viewModel.addBehaviorErrorMessage = nil
+                }
+            } message: {
+                Text(viewModel.addBehaviorErrorMessage ?? "")
+            }
     }
 
     private func confirmRecord(_ behavior: BehaviorItem) {
@@ -1258,11 +1559,12 @@ private struct HomePresentationModifier: ViewModifier {
             }
         }
         behaviorPendingDeletion = nil
+        behaviorPendingDeleteConfirmation = nil
     }
 }
 
 // App 内自定义确认弹窗。
-// 比系统 Alert 更柔和，也可以使用行为颜色做视觉关联。
+// 比系统 Alert 更柔和，也可以使用习惯颜色做视觉关联。
 private struct BadUpDialog: View {
     let tintColor: Color
     let title: String
@@ -1374,7 +1676,7 @@ private struct HomeHeaderView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("今日行为记录")
+            Text("今日习惯记录")
                 .font(.largeTitle.bold())
             Text(dateText)
                 .font(.subheadline)
@@ -1384,23 +1686,28 @@ private struct HomeHeaderView: View {
     }
 }
 
-// 首页行为按钮。
+// 首页习惯按钮。
 private struct BehaviorButtonRow: View {
     let behavior: BehaviorItem
     let onTap: () -> Void
     let onLongPress: () -> Void
+    let onLongDragEnd: (CGFloat) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(behavior.name)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if !behavior.detail.isEmpty {
                 Text(behavior.detail)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.82))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -1408,8 +1715,153 @@ private struct BehaviorButtonRow: View {
         .background(behavior.tintColor.gradient)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .onTapGesture(perform: onTap)
-        .onLongPressGesture(perform: onLongPress)
+        .overlay {
+            LongPressDragGestureBridge(
+                minimumPressDuration: 0.38,
+                dragThreshold: 28,
+                onTap: onTap,
+                onLongPress: onLongPress,
+                onLongDragEnd: onLongDragEnd
+            )
+        }
+    }
+}
+
+// 用 UIKit 手势桥接避免 SwiftUI 高优先级手势抢走 ScrollView 的正常滑动。
+private struct LongPressDragGestureBridge: UIViewRepresentable {
+    let minimumPressDuration: TimeInterval
+    let dragThreshold: CGFloat
+    let onTap: () -> Void
+    let onLongPress: () -> Void
+    let onLongDragEnd: (CGFloat) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .clear
+
+        let tapGesture = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        tapGesture.cancelsTouchesInView = false
+        tapGesture.delegate = context.coordinator
+        view.addGestureRecognizer(tapGesture)
+
+        let longPressGesture = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPressGesture.minimumPressDuration = minimumPressDuration
+        longPressGesture.allowableMovement = 22
+        longPressGesture.cancelsTouchesInView = false
+        longPressGesture.delegate = context.coordinator
+        view.addGestureRecognizer(longPressGesture)
+
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        context.coordinator.dragThreshold = dragThreshold
+        context.coordinator.onTap = onTap
+        context.coordinator.onLongPress = onLongPress
+        context.coordinator.onLongDragEnd = onLongDragEnd
+        if let longPressGesture = uiView.gestureRecognizers?.compactMap({ $0 as? UILongPressGestureRecognizer }).first {
+            longPressGesture.minimumPressDuration = minimumPressDuration
+            longPressGesture.allowableMovement = 22
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.setContainingScrollViewEnabled(from: uiView, isEnabled: true)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(
+            dragThreshold: dragThreshold,
+            onTap: onTap,
+            onLongPress: onLongPress,
+            onLongDragEnd: onLongDragEnd
+        )
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var dragThreshold: CGFloat
+        var onTap: () -> Void
+        var onLongPress: () -> Void
+        var onLongDragEnd: (CGFloat) -> Void
+
+        private var startPoint: CGPoint = .zero
+        private var latestTranslation: CGSize = .zero
+
+        init(
+            dragThreshold: CGFloat,
+            onTap: @escaping () -> Void,
+            onLongPress: @escaping () -> Void,
+            onLongDragEnd: @escaping (CGFloat) -> Void
+        ) {
+            self.dragThreshold = dragThreshold
+            self.onTap = onTap
+            self.onLongPress = onLongPress
+            self.onLongDragEnd = onLongDragEnd
+        }
+
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended else {
+                return
+            }
+            onTap()
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            let point = gesture.location(in: gesture.view)
+
+            switch gesture.state {
+            case .began:
+                startPoint = point
+                latestTranslation = .zero
+                setContainingScrollViewEnabled(from: gesture.view, isEnabled: false)
+            case .changed:
+                latestTranslation = CGSize(
+                    width: point.x - startPoint.x,
+                    height: point.y - startPoint.y
+                )
+            case .ended:
+                latestTranslation = CGSize(
+                    width: point.x - startPoint.x,
+                    height: point.y - startPoint.y
+                )
+                if abs(latestTranslation.height) >= dragThreshold {
+                    onLongDragEnd(latestTranslation.height)
+                } else {
+                    onLongPress()
+                }
+                latestTranslation = .zero
+                setContainingScrollViewEnabled(from: gesture.view, isEnabled: true)
+            case .cancelled, .failed:
+                latestTranslation = .zero
+                setContainingScrollViewEnabled(from: gesture.view, isEnabled: true)
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
+        }
+
+        func setContainingScrollViewEnabled(from view: UIView?, isEnabled: Bool) {
+            var currentView = view?.superview
+            while let candidate = currentView {
+                if let scrollView = candidate as? UIScrollView {
+                    scrollView.isScrollEnabled = isEnabled
+                    return
+                }
+                currentView = candidate.superview
+            }
+        }
     }
 }
 
@@ -1426,11 +1878,15 @@ private struct TodayCountRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.behavior.name)
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 if !item.behavior.detail.isEmpty {
                     Text(item.behavior.detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 
@@ -1457,7 +1913,7 @@ private struct TodayCountRow: View {
 }
 
 // 详情页顶部的总次数文字。
-// 数字用行为颜色强调，其它说明文字保持弱化，阅读层级更清楚。
+// 数字用习惯颜色强调，其它说明文字保持弱化，阅读层级更清楚。
 private struct TotalCountText: View {
     let prefix: String
     let count: Int
@@ -1480,34 +1936,116 @@ private struct TotalCountText: View {
 }
 
 // 更多页面。
-// 这里先展示登录用户信息，后续可以继续追加设置项。
+// 展示当前登录用户的种子信息和 App 基本信息。
 private struct MoreView: View {
     let user: BadUpUser?
 
+    @State private var behaviorScore: Int?
+    @State private var scoreLoadError: String?
+
     var body: some View {
         List {
-            Section("用户信息") {
-                InfoRow(title: "UserId", value: user.map { String($0.userId) } ?? "-")
-                InfoRow(title: "UserCode", value: user?.userCode ?? "-")
-                InfoRow(title: "DeviceId", value: user?.deviceId ?? "-")
-                InfoRow(title: "Platform", value: user?.platform ?? "-")
-                InfoRow(title: "AppVersion", value: user?.appVersion ?? "-")
-                InfoRow(title: "SystemVersion", value: user?.systemVersion ?? "-")
+            Section("种子信息") {
+                InfoRow(title: "种子编号", value: user.map { String($0.userId) } ?? "-")
+                NavigationLink {
+                    GrowthIndexView(index: behaviorScore ?? 0)
+                } label: {
+                    InfoRow(
+                        title: "生长指数",
+                        value: scoreText,
+                        valueColor: scoreColor
+                    )
+                }
+                InfoRow(title: "播种日期", value: formattedCreatedAt)
+                InfoRow(title: "发芽土地", value: platformDisplayName)
             }
 
-            Section("更多") {
-                Text("其他选项后面再加")
-                    .foregroundStyle(.secondary)
+            Section("关于芽记") {
+                InfoRow(title: "当前版本", value: currentAppVersion)
+                InfoRow(title: "联系我们", value: "BooTry")
+                InfoRow(title: "ICP备案信息", value: "粤ICP备19137866号-3")
             }
         }
-        .navigationTitle("更多")
+        .navigationTitle("关于芽记")
         .navigationBarTitleDisplayMode(.inline)
+        .task(id: user?.userId) {
+            await loadBehaviorScore()
+        }
+    }
+
+    private var scoreText: String {
+        if let behaviorScore {
+            return String(behaviorScore)
+        }
+        if scoreLoadError != nil {
+            return "加载失败"
+        }
+        return "加载中"
+    }
+
+    private var scoreColor: Color? {
+        guard let behaviorScore else {
+            return nil
+        }
+        if behaviorScore > 0 {
+            return Color(red: 0.26, green: 0.78, blue: 0.48)
+        }
+        if behaviorScore < 0 {
+            return Color(red: 0.96, green: 0.37, blue: 0.32)
+        }
+        return .secondary
+    }
+
+    private var formattedCreatedAt: String {
+        guard let createdAt = user?.createdAt, !createdAt.isEmpty else {
+            return "-"
+        }
+        if createdAt.count >= 10 {
+            return String(createdAt.prefix(10))
+        }
+        return createdAt
+    }
+
+    private var platformDisplayName: String {
+        guard let platform = user?.platform?.lowercased(), !platform.isEmpty else {
+            return "-"
+        }
+        if platform.contains("wechat") || platform.contains("weixin") || platform.contains("mini") || platform.contains("wx") {
+            return "微信小程序"
+        }
+        if platform.contains("android") {
+            return "Android"
+        }
+        if platform.contains("ios") {
+            return "iOS App"
+        }
+        return user?.platform ?? "-"
+    }
+
+    private var currentAppVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
+    }
+
+    private func loadBehaviorScore() async {
+        guard let userId = user?.userId else {
+            behaviorScore = 0
+            return
+        }
+        do {
+            let score = try await RemoteBehaviorService.shared.fetchUserBehaviorScore(userId: userId)
+            behaviorScore = score.behaviorScore
+            scoreLoadError = nil
+        } catch {
+            behaviorScore = nil
+            scoreLoadError = error.localizedDescription
+        }
     }
 }
 
 private struct InfoRow: View {
     let title: String
     let value: String
+    var valueColor: Color? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -1517,13 +2055,267 @@ private struct InfoRow: View {
 
             Text(value)
                 .fontWeight(.medium)
+                .foregroundStyle(valueColor ?? Color.primary)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
 
-// 新增行为页。
+private struct GrowthIndexView: View {
+    let index: Int
+
+    private let stages: [GrowthStage] = [
+        GrowthStage(name: "静谧萌发", desc: "生命在泥土中沉睡，积蓄破土的力量。"),
+        GrowthStage(name: "破土嫩芽", desc: "勇敢地顶开泥土，向世界问好。"),
+        GrowthStage(name: "写实双叶", desc: "舒展的嫩芽，汲取岁月精华。"),
+        GrowthStage(name: "韧性初显", desc: "躯干逐渐挺拔，无惧微风掠过。"),
+        GrowthStage(name: "向光生长", desc: "每一个分叉，都是向天空的探索。"),
+        GrowthStage(name: "少年青葱", desc: "枝干交叠错落，初现生命繁华。"),
+        GrowthStage(name: "繁枝错落", desc: "岁月留下痕迹，构筑独特风骨。"),
+        GrowthStage(name: "绿意叠嶂", desc: "叶影在阳光下，交织光阴故事。"),
+        GrowthStage(name: "生命礼赞", desc: "厚重而苍劲，守护脚下土地。"),
+        GrowthStage(name: "参天屹立", desc: "阅尽千帆，归于大自然的平静。")
+    ]
+
+    private var stageIndex: Int {
+        if index <= 0 { return 0 }
+        if index <= 10 { return 1 }
+        if index <= 50 { return 2 }
+        if index <= 100 { return 3 }
+        if index <= 300 { return 4 }
+        if index <= 500 { return 5 }
+        if index <= 1000 { return 6 }
+        if index <= 2000 { return 7 }
+        if index <= 3000 { return 8 }
+        return 9
+    }
+
+    private var stage: GrowthStage {
+        stages[stageIndex]
+    }
+
+    private var progress: Double {
+        min(max(Double(index), 0), 5000) / 5000
+    }
+
+    var body: some View {
+        VStack(spacing: 28) {
+            VStack(spacing: 10) {
+                Text("种子芽记")
+                    .font(.title.weight(.light))
+                    .kerning(6)
+                    .foregroundStyle(Color(red: 0.24, green: 0.16, blue: 0.13))
+
+                Text(stage.desc)
+                    .font(.subheadline)
+                    .foregroundStyle(Color(red: 0.43, green: 0.56, blue: 0.43))
+                    .multilineTextAlignment(.center)
+            }
+
+            Spacer(minLength: 0)
+
+            GrowthPlantIllustration(stageIndex: stageIndex)
+                .frame(maxWidth: 300, maxHeight: 300)
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(stage.name)
+                        .font(.headline)
+                        .foregroundStyle(Color(red: 0.18, green: 0.49, blue: 0.20))
+
+                    Spacer()
+
+                    Text("生长指数：\(index)")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                ProgressView(value: progress)
+                    .tint(Color(red: 0.18, green: 0.49, blue: 0.20))
+            }
+            .padding(20)
+            .background(Color.white.opacity(0.86))
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .shadow(color: Color.black.opacity(0.06), radius: 16, x: 0, y: 10)
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.96, green: 0.98, blue: 0.96),
+                    .white
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .navigationTitle("生长指数")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct GrowthStage {
+    let name: String
+    let desc: String
+}
+
+private struct GrowthPlantIllustration: View {
+    let stageIndex: Int
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.94, green: 0.98, blue: 0.93))
+                .frame(width: 260, height: 260)
+
+            if stageIndex == 0 {
+                Capsule()
+                    .fill(Color(red: 0.46, green: 0.30, blue: 0.16))
+                    .frame(width: 54, height: 34)
+                    .rotationEffect(.degrees(-16))
+                    .offset(y: 52)
+            } else {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(red: 0.44, green: 0.29, blue: 0.17))
+                    .frame(width: CGFloat(10 + stageIndex * 2), height: CGFloat(78 + stageIndex * 10))
+                    .offset(y: CGFloat(48 - stageIndex * 6))
+
+                ForEach(0..<leafCount, id: \.self) { index in
+                    LeafShape()
+                        .fill(leafColor(for: index))
+                        .frame(width: leafSize(for: index).width, height: leafSize(for: index).height)
+                        .rotationEffect(.degrees(index.isMultiple(of: 2) ? -34 : 34))
+                        .offset(x: leafOffset(for: index).x, y: leafOffset(for: index).y)
+                }
+            }
+
+            Capsule()
+                .fill(Color(red: 0.64, green: 0.78, blue: 0.58).opacity(0.35))
+                .frame(width: 170, height: 18)
+                .offset(y: 106)
+        }
+    }
+
+    private var leafCount: Int {
+        min(max(stageIndex + 1, 2), 12)
+    }
+
+    private func leafSize(for index: Int) -> CGSize {
+        let size = CGFloat(40 + min(stageIndex, 7) * 4 - index % 3 * 4)
+        return CGSize(width: size, height: size * 0.66)
+    }
+
+    private func leafOffset(for index: Int) -> CGPoint {
+        let side: CGFloat = index.isMultiple(of: 2) ? -1 : 1
+        let row = CGFloat(index / 2)
+        let x = side * CGFloat(28 + (index % 3) * 10)
+        let y = CGFloat(56 - Int(row) * (14 + min(stageIndex, 5)))
+        return CGPoint(x: x, y: y)
+    }
+
+    private func leafColor(for index: Int) -> Color {
+        let greens = [
+            Color(red: 0.25, green: 0.68, blue: 0.30),
+            Color(red: 0.36, green: 0.78, blue: 0.36),
+            Color(red: 0.18, green: 0.55, blue: 0.27)
+        ]
+        return greens[index % greens.count]
+    }
+}
+
+private struct LeafShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.minY - rect.height * 0.35)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.maxY + rect.height * 0.35)
+        )
+        return path
+    }
+}
+
+private struct BehaviorKindPickerView: View {
+    @Binding var selectedKind: BehaviorKind
+    let isEditable: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(BehaviorKind.allCases) { kind in
+                BehaviorKindOptionButton(
+                    kind: kind,
+                    isSelected: kind == selectedKind,
+                    isEditable: isEditable
+                ) {
+                    selectedKind = kind
+                }
+            }
+        }
+    }
+}
+
+private struct BehaviorKindOptionButton: View {
+    let kind: BehaviorKind
+    let isSelected: Bool
+    let isEditable: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(kind.title)
+                    .font(.headline)
+                Text(kind.subtitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(isSelected ? kind.tintColor : Color.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(isSelected ? kind.tintColor.opacity(0.12) : Color.gray.opacity(0.08))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(isSelected ? kind.tintColor : Color.clear, lineWidth: 1.2)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .allowsHitTesting(isEditable)
+    }
+}
+
+private struct AddBehaviorFormSection<Content: View>: View {
+    let title: String
+    let content: Content
+
+    init(_ title: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 2)
+
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+}
+
+// 新增/编辑习惯页。
 private struct AddBehaviorView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -1533,12 +2325,13 @@ private struct AddBehaviorView: View {
 
     @State private var name = ""
     @State private var detail = ""
+    @State private var selectedBehaviorKind: BehaviorKind = .good
     @State private var selectedColor: BehaviorColorOption = .coral
     @State private var selectedPaletteHex: String?
     @State private var isShowingMoreColors = false
     @State private var isSaving = false
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 3)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
 
     private var selectedPreviewColor: Color {
         if let selectedPaletteHex,
@@ -1559,6 +2352,7 @@ private struct AddBehaviorView: View {
 
         _name = State(initialValue: editingBehavior?.name ?? "")
         _detail = State(initialValue: editingBehavior?.detail ?? "")
+        _selectedBehaviorKind = State(initialValue: editingBehavior?.behaviorKind ?? .good)
 
         if let editingBehavior {
             if let defaultColor = BehaviorColorOption(rawValue: editingBehavior.colorHex) {
@@ -1586,75 +2380,20 @@ private struct AddBehaviorView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("基本信息") {
-                    TextField("行为名称", text: $name)
-                    TextField("行为描述", text: $detail, axis: .vertical)
-                        .lineLimit(3...5)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    basicInfoSection
+                    behaviorKindSection
+                    colorSection
+                    previewSection
                 }
-
-                Section("按钮颜色") {
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(BehaviorColorOption.allCases) { option in
-                            Button {
-                                selectedColor = option
-                                selectedPaletteHex = nil
-                            } label: {
-                                VStack(spacing: 8) {
-                                    Circle()
-                                        .fill(option.color)
-                                        .frame(width: 34, height: 34)
-                                        .overlay {
-                                            if selectedPaletteHex == nil && selectedColor == option {
-                                                Circle()
-                                                    .stroke(Color.primary, lineWidth: 2)
-                                                    .padding(-4)
-                                            }
-                                        }
-
-                                    Text(option.name)
-                                        .font(.caption)
-                                        .foregroundStyle(.primary)
-                                }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(Color.gray.opacity(0.08))
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-
-                    Button {
-                        isShowingMoreColors = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "swatchpalette")
-                            Text("更多颜色")
-                            Spacer()
-                            Circle()
-                                .fill(selectedPreviewColor)
-                                .frame(width: 20, height: 20)
-                        }
-                    }
-                }
-
-                Section("预览") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "行为名称" : name)
-                            .font(.title3.weight(.semibold))
-                            .foregroundStyle(.white)
-                        Text(detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "这里会显示行为描述" : detail)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.85))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(selectedPreviewColor.gradient)
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 24)
             }
-            .navigationTitle(editingBehavior == nil ? "新增行为" : "编辑行为")
+            .background(Color(red: 0.96, green: 0.96, blue: 0.98))
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle(editingBehavior == nil ? "新增习惯" : "编辑习惯")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -1691,7 +2430,8 @@ private struct AddBehaviorView: View {
                                     userId: userId,
                                     name: name,
                                     detail: detail,
-                                    colorHex: selectedColorHex
+                                    colorHex: selectedColorHex,
+                                    behaviorKind: selectedBehaviorKind
                                 )
                             }
 
@@ -1725,6 +2465,135 @@ private struct AddBehaviorView: View {
                 MoreColorsView(selectedHex: $selectedPaletteHex)
             }
         }
+    }
+
+    private var basicInfoSection: some View {
+        AddBehaviorFormSection("基本信息") {
+            VStack(spacing: 0) {
+                TextField("习惯名称", text: $name)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 48)
+
+                Divider()
+                    .padding(.leading, 14)
+
+                TextField("习惯描述", text: $detail, axis: .vertical)
+                    .lineLimit(3...5)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(minHeight: 86, alignment: .topLeading)
+            }
+        }
+    }
+
+    private var behaviorKindSection: some View {
+        AddBehaviorFormSection(editingBehavior == nil ? "习惯类型" : "习惯类型（编辑时不可修改）") {
+            BehaviorKindPickerView(
+                selectedKind: $selectedBehaviorKind,
+                isEditable: editingBehavior == nil
+            )
+            .padding(12)
+        }
+    }
+
+    private var colorSection: some View {
+        AddBehaviorFormSection("按钮颜色") {
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(BehaviorColorOption.allCases) { option in
+                    colorOptionButton(option)
+                }
+                moreColorGridButton
+            }
+            .padding(12)
+        }
+    }
+
+    private var previewSection: some View {
+        AddBehaviorFormSection("预览") {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "习惯名称" : name)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "这里会显示习惯描述" : detail)
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background(selectedPreviewColor.gradient)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(12)
+        }
+    }
+
+    private func colorOptionButton(_ option: BehaviorColorOption) -> some View {
+        Button {
+            selectedColor = option
+            selectedPaletteHex = nil
+        } label: {
+            VStack(spacing: 6) {
+                Circle()
+                    .fill(option.color)
+                    .frame(width: 30, height: 30)
+                    .overlay {
+                        if selectedPaletteHex == nil && selectedColor == option {
+                            Circle()
+                                .stroke(Color.primary, lineWidth: 2)
+                                .padding(-4)
+                        }
+                    }
+
+                Text(option.name)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(Color.gray.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var moreColorGridButton: some View {
+        Button {
+            isShowingMoreColors = true
+        } label: {
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.96, green: 0.37, blue: 0.32))
+                        .frame(width: 12, height: 12)
+                        .offset(x: -8, y: -8)
+                    Circle()
+                        .fill(Color(red: 0.98, green: 0.71, blue: 0.21))
+                        .frame(width: 12, height: 12)
+                        .offset(x: 8, y: -8)
+                    Circle()
+                        .fill(Color(red: 0.19, green: 0.70, blue: 0.77))
+                        .frame(width: 12, height: 12)
+                        .offset(x: -8, y: 8)
+                    Circle()
+                        .fill(Color(red: 0.26, green: 0.78, blue: 0.48))
+                        .frame(width: 12, height: 12)
+                        .offset(x: 8, y: 8)
+                }
+                .frame(width: 30, height: 30)
+
+                Text("更多")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 7)
+            .background(Color.gray.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -1836,12 +2705,6 @@ private struct BehaviorYearDetailView: View {
                             .background(Color.gray.opacity(0.12))
                             .clipShape(Circle())
                     }
-                }
-
-                if !behavior.detail.isEmpty {
-                    Text(behavior.detail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                 }
 
                 LazyVGrid(columns: columns, spacing: 16) {
@@ -2078,7 +2941,7 @@ private struct DayCellView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("\(summary.day)")
                 .font(.headline)
-                .foregroundStyle(isToday ? .white : .primary)
+                .foregroundStyle(isToday ? Color.white : Color.primary)
                 .frame(width: 30, height: 30)
                 .background(isToday ? behavior.tintColor : Color.clear)
                 .clipShape(Circle())
@@ -2087,7 +2950,7 @@ private struct DayCellView: View {
 
             Text(summary.count == 0 ? "-" : "\(summary.count)次")
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(summary.count == 0 ? .secondary : behavior.tintColor)
+                .foregroundStyle(summary.count == 0 ? Color.secondary : behavior.tintColor)
 
             Capsule()
                 .fill(summary.count == 0 ? Color.gray.opacity(0.12) : behavior.tintColor.opacity(0.8))
@@ -2127,7 +2990,7 @@ private struct WeekStripItem: View {
             Text(weekdayText)
                 .font(.caption)
         }
-        .foregroundStyle(isSelected ? .white : .primary)
+        .foregroundStyle(isSelected ? Color.white : Color.primary)
         .frame(width: 48, height: 64)
         .background(isSelected ? tintColor : Color.gray.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
