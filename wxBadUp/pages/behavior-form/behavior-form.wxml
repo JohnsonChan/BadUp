@@ -1,0 +1,81 @@
+<view class="page">
+  <navigation-bar title="{{mode === 'edit' ? '编辑行为' : '新增行为'}}" color="#182827" background="#F6FBF8"></navigation-bar>
+
+  <scroll-view class="scrollarea" scroll-y>
+    <view class="content">
+      <!-- 行为名称输入。 -->
+      <view class="section">
+        <view class="label">行为名称</view>
+        <input class="input" value="{{name}}" placeholder="例如：刷视频" bindinput="onNameInput" />
+      </view>
+
+      <!-- 行为描述输入。 -->
+      <view class="section">
+        <view class="label">行为描述</view>
+        <textarea class="textarea" value="{{desc}}" placeholder="写一句提醒自己的描述" maxlength="120" bindinput="onDescInput" />
+      </view>
+
+      <!-- 颜色选择区。 -->
+      <view class="section">
+        <view class="label">按钮颜色</view>
+        <view class="palette">
+          <view
+            wx:for="{{palette}}"
+            wx:key="hex"
+            class="color-item {{item.type === 'more' ? 'more-color-item' : ''}} {{colorHex === item.hex || (item.type === 'more' && isMoreColorSelected) ? 'selected' : ''}}"
+            data-hex="{{item.hex}}"
+            data-type="{{item.type || 'color'}}"
+            bindtap="selectColor"
+          >
+            <block wx:if="{{item.type === 'more'}}">
+              <view class="more-color-icon">
+                <view style="background: #F55F52;"></view>
+                <view style="background: #F9B536;"></view>
+                <view style="background: #31B3C5;"></view>
+                <view style="background: #43C77A;"></view>
+              </view>
+            </block>
+            <block wx:else>
+              <view class="color-circle" style="background: {{item.hex}};"></view>
+            </block>
+            <view class="color-name">{{item.name}}</view>
+          </view>
+        </view>
+      </view>
+
+      <!-- 实时预览最终按钮效果。 -->
+      <view class="section">
+        <view class="label">预览</view>
+        <view class="preview" style="background: {{colorHex}};">
+          <view class="preview-name">{{name || '行为名称'}}</view>
+          <view class="preview-desc">{{desc || '这里会显示行为描述'}}</view>
+        </view>
+      </view>
+
+      <!-- 新增和编辑共用保存按钮。 -->
+      <button class="save-btn" loading="{{isSaving}}" bindtap="save">保存</button>
+    </view>
+  </scroll-view>
+
+  <!-- 完整颜色板。 -->
+  <view wx:if="{{isMoreColorsVisible}}" class="color-sheet-mask" bindtap="closeMoreColors">
+    <view class="color-sheet" catchtap="noop">
+      <view class="color-sheet-head">
+        <view class="color-sheet-title">更多颜色</view>
+        <view class="color-sheet-close" bindtap="closeMoreColors">关闭</view>
+      </view>
+      <view class="more-palette">
+        <view
+          wx:for="{{fullPalette}}"
+          wx:key="hex"
+          class="color-item sheet-color-item {{colorHex === item.hex ? 'selected' : ''}}"
+          data-hex="{{item.hex}}"
+          bindtap="selectMoreColor"
+        >
+          <view class="color-circle" style="background: {{item.hex}};"></view>
+          <view class="color-name">{{item.name}}</view>
+        </view>
+      </view>
+    </view>
+  </view>
+</view>

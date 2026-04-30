@@ -1,0 +1,55 @@
+/* 页面和内容容器。 */
+page {
+  min-height: 100vh;
+  background: #f6fbf8;
+}
+
+.content {
+  padding: 30rpx;
+}
+
+/* 分组标题与信息卡片。 */
+.section-title {
+  margin: 18rpx 0;
+  color: #1f2d2b;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.card {
+  padding: 18rpx 26rpx;
+  border-radius: 30rpx;
+  background: #fff;
+  box-shadow: 0 16rpx 36rpx rgba(30, 54, 50, 0.06);
+}
+
+.row {
+  display: flex;
+  gap: 24rpx;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid #edf1ef;
+  color: #1f2d2b;
+  font-size: 25rpx;
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+/* 左侧字段名固定宽度，右侧内容自适应。 */
+.row text:first-child {
+  width: 210rpx;
+  flex-shrink: 0;
+  color: #7a8784;
+}
+
+.row text:last-child {
+  flex: 1;
+  word-break: break-all;
+  font-weight: 700;
+}
+
+.muted {
+  color: #7a8784;
+  font-size: 27rpx;
+}

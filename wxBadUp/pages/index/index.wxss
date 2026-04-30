@@ -1,0 +1,380 @@
+/* 页面基础背景。 */
+page {
+  min-height: 100vh;
+  background: #f5fbf8;
+}
+
+.page {
+  height: 100vh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 闪屏层。 */
+.splash {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(145deg, #f9fffb 0%, #eef9f1 48%, #d9f1e2 100%);
+}
+
+/* 呼应图标色调的柔和绿色光斑。 */
+.splash-glow {
+  position: absolute;
+  border-radius: 999rpx;
+  filter: blur(16rpx);
+}
+
+.splash-glow-a {
+  width: 320rpx;
+  height: 320rpx;
+  left: -80rpx;
+  top: 140rpx;
+  background: rgba(87, 198, 126, 0.16);
+}
+
+.splash-glow-b {
+  width: 300rpx;
+  height: 300rpx;
+  right: -70rpx;
+  bottom: 180rpx;
+  background: rgba(22, 160, 133, 0.14);
+}
+
+/* 与 iOS 启动页一致的标题区位置。 */
+.splash-brand {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 42%;
+  transform: translateY(-50%);
+  text-align: center;
+  padding: 0 56rpx;
+  box-sizing: border-box;
+}
+
+.splash-title {
+  color: #173b2f;
+  font-size: 84rpx;
+  font-weight: 900;
+  letter-spacing: 2rpx;
+}
+
+.splash-subtitle {
+  margin-top: 14rpx;
+}
+
+.splash-subtitle-line {
+  display: block;
+  color: rgba(23, 59, 47, 0.72);
+  font-size: 28rpx;
+  font-weight: 600;
+  line-height: 1.65;
+}
+
+.splash-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 72%;
+  transform: translateY(-50%);
+  min-height: 120rpx;
+  text-align: center;
+  color: #21503f;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.loading-dot {
+  width: 34rpx;
+  height: 34rpx;
+  margin: 0 auto 18rpx;
+  border-radius: 999rpx;
+  border: 5rpx solid rgba(75, 156, 105, 0.18);
+  border-top-color: #39a065;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.status-text {
+  color: #21503f;
+  font-size: 24rpx;
+  font-weight: 600;
+}
+
+.retry-btn {
+  width: 168rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  margin-top: 22rpx;
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 700;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #3db56d 0%, #2e9867 100%);
+  box-shadow: 0 14rpx 30rpx rgba(44, 134, 92, 0.24);
+}
+
+.retry-btn::after {
+  border: 0;
+}
+
+.error-text {
+  display: block;
+  max-width: 560rpx;
+  margin: 0 auto;
+  padding: 0 36rpx;
+  color: #285443;
+  line-height: 1.55;
+}
+
+/* 主页面滚动区域。 */
+.scrollarea {
+  flex: 1;
+  min-height: 0;
+}
+
+.content {
+  padding: 24rpx 28rpx 54rpx;
+}
+
+/* 标题栏下方的操作区。 */
+.top-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx 8rpx;
+  background: #f5fbf8;
+}
+
+/* 首页新增 / 更多按钮。 */
+.nav-btn,
+.nav-more {
+  width: 88rpx;
+  height: 64rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d85252;
+  font-size: 46rpx;
+  line-height: 1;
+  font-weight: 400;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+}
+
+/* 首页标题区。 */
+.hero {
+  text-align: center;
+  margin: 12rpx 0 34rpx;
+}
+
+.hero-title {
+  color: #161f1e;
+  font-size: 48rpx;
+  font-weight: 900;
+}
+
+.hero-date {
+  margin-top: 12rpx;
+  color: #7b8a88;
+  font-size: 26rpx;
+}
+
+/* 行为操作按钮列表。 */
+.behavior-list {
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+}
+
+.behavior-card {
+  min-height: 96rpx;
+  padding: 28rpx;
+  border-radius: 30rpx;
+  box-shadow: 0 18rpx 34rpx rgba(31, 40, 44, 0.12);
+}
+
+.behavior-name {
+  color: #fff;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.behavior-desc {
+  margin-top: 10rpx;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 24rpx;
+  line-height: 1.45;
+  max-height: 70rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 今日统计列表。 */
+.section-title {
+  margin: 42rpx 0 18rpx;
+  color: #202927;
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.count-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.count-row {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 24rpx;
+  border-radius: 26rpx;
+  background: rgba(0, 0, 0, 0.045);
+}
+
+.color-dot {
+  width: 22rpx;
+  height: 22rpx;
+  border-radius: 999rpx;
+}
+
+.count-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.count-name {
+  color: #202927;
+  font-size: 29rpx;
+  font-weight: 700;
+}
+
+.count-desc {
+  margin-top: 6rpx;
+  color: #818d8b;
+  font-size: 22rpx;
+  line-height: 1.45;
+  max-height: 64rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.count-value {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+  font-size: 36rpx;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.count-value text {
+  margin-left: 4rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.chevron {
+  color: #9aa5a2;
+  font-size: 42rpx;
+}
+
+/* 两种弹窗共用的蒙层和卡片样式。 */
+.dialog-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.dialog-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 580rpx;
+  box-sizing: border-box;
+  padding: 34rpx 30rpx 30rpx;
+  border-radius: 34rpx;
+  background: #fff;
+  box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.16);
+  transform: translate(-50%, -50%);
+}
+
+.dialog-bar {
+  width: 72rpx;
+  height: 8rpx;
+  margin: 0 auto 24rpx;
+  border-radius: 999rpx;
+}
+
+.dialog-title {
+  text-align: center;
+  color: #202927;
+  font-size: 32rpx;
+  font-weight: 900;
+}
+
+.dialog-message {
+  margin-top: 14rpx;
+  text-align: center;
+  color: #7a8582;
+  font-size: 26rpx;
+  line-height: 1.55;
+}
+
+.dialog-message text {
+  font-weight: 900;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 18rpx;
+  margin-top: 30rpx;
+}
+
+.dialog-btn {
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  height: 78rpx;
+  line-height: 78rpx;
+  border-radius: 22rpx;
+  font-size: 27rpx;
+  font-weight: 800;
+}
+
+.dialog-btn::after {
+  border: 0;
+}
+
+.dialog-btn.ghost {
+  color: #6f7b79;
+  background: #f0f2f1;
+}
+
+.dialog-btn.danger {
+  color: #e54d4d;
+  background: #f6eeee;
+}
+
+.dialog-btn.main {
+  color: #fff;
+}

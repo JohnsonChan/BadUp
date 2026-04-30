@@ -1,0 +1,205 @@
+/* 页面与滚动容器。 */
+page {
+  min-height: 100vh;
+  background: #f6fbf8;
+}
+
+.scrollarea {
+  height: calc(100vh - 96rpx);
+}
+
+.content {
+  padding: 28rpx 30rpx 70rpx;
+}
+
+/* 表单卡片区块。 */
+.section {
+  margin-bottom: 28rpx;
+  padding: 28rpx;
+  border-radius: 30rpx;
+  background: #fff;
+  box-shadow: 0 16rpx 38rpx rgba(30, 54, 50, 0.06);
+}
+
+.label {
+  margin-bottom: 18rpx;
+  color: #1f2d2b;
+  font-size: 28rpx;
+  font-weight: 800;
+}
+
+.input,
+.textarea {
+  width: 100%;
+  box-sizing: border-box;
+  color: #1f2d2b;
+  font-size: 30rpx;
+  border-radius: 22rpx;
+  background: #f4f7f6;
+}
+
+.input {
+  height: 88rpx;
+  padding: 0 22rpx;
+}
+
+.textarea {
+  height: 140rpx;
+  min-height: 140rpx;
+  padding: 18rpx 22rpx;
+  line-height: 1.35;
+}
+
+/* 颜色面板。 */
+.palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.color-item {
+  width: calc((100% - 48rpx) / 4);
+  box-sizing: border-box;
+  padding: 16rpx 6rpx 14rpx;
+  text-align: center;
+  border-radius: 18rpx;
+  background: #f4f7f6;
+  border: 2rpx solid transparent;
+}
+
+.color-item.selected {
+  border-color: #172b2a;
+  background: #fff;
+}
+
+.color-circle {
+  width: 44rpx;
+  height: 44rpx;
+  margin: 0 auto 10rpx;
+  border-radius: 999rpx;
+}
+
+.color-name {
+  color: #273735;
+  font-size: 20rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.more-color-item {
+  background: #fff;
+}
+
+.more-color-icon {
+  width: 44rpx;
+  height: 44rpx;
+  margin: 0 auto 10rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4rpx;
+}
+
+.more-color-icon view {
+  width: 20rpx;
+  height: 20rpx;
+  border-radius: 999rpx;
+}
+
+/* 按钮预览卡片。 */
+.preview {
+  min-height: 96rpx;
+  padding: 28rpx;
+  border-radius: 30rpx;
+  box-shadow: 0 18rpx 34rpx rgba(31, 40, 44, 0.12);
+}
+
+.preview-name {
+  color: #fff;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+
+.preview-desc {
+  margin-top: 10rpx;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 24rpx;
+  line-height: 1.45;
+  max-height: 70rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+/* 保存按钮。 */
+.save-btn {
+  width: 420rpx;
+  height: 88rpx;
+  margin: 18rpx auto 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 900;
+  border-radius: 999rpx;
+  background: #172b2a;
+}
+
+.save-btn::after {
+  border: 0;
+}
+
+/* 更多颜色弹层。 */
+.color-sheet-mask {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.color-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 28rpx 30rpx 48rpx;
+  border-radius: 30rpx 30rpx 0 0;
+  background: #fff;
+  box-shadow: 0 -18rpx 44rpx rgba(30, 54, 50, 0.12);
+}
+
+.color-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22rpx;
+}
+
+.color-sheet-title {
+  color: #1f2d2b;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.color-sheet-close {
+  color: #7a8784;
+  font-size: 25rpx;
+  font-weight: 700;
+}
+
+.more-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.sheet-color-item {
+  background: #f4f7f6;
+}

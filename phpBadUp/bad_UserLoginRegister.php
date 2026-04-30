@@ -12,7 +12,8 @@ if (empty($data['deviceId']) && empty($data['phone']) && empty($data['userCode']
 
 // 确保新用户或旧空用户有默认行为项。
 // 只在该 userId 没有任何行为项时初始化，避免用户删除后下次登录又被自动恢复。
-function badEnsureDefaultBehaviors($pdo, $userId) {
+// 小程序和 iOS 使用不同的默认项，方便分别迭代。
+function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $count = $pdo->prepare("SELECT COUNT(*) FROM bad_Behavior WHERE userId = :userId");
     $count->execute([':userId' => $userId]);
     if (intval($count->fetchColumn()) > 0) {
@@ -20,12 +21,21 @@ function badEnsureDefaultBehaviors($pdo, $userId) {
     }
 
     $createdAt = date('Y-m-d H:i:s');
-    $defaults = [
-        ['撸管', '记录一次没忍住', '#F55F52', 10],
-        ['刷视频', '记录一次沉迷短视频', '#31B3C5', 20],
-        ['熬夜', '记录一次睡太晚', '#6C7EF7', 30],
-        ['吃太饱', '记录一次吃撑了', '#F9B536', 40]
-    ];
+    $platform = trim((string)$platform);
+
+    if ($platform === 'WeChatMiniProgram') {
+        $defaults = [
+            ['熬夜', '记录一次睡太晚', '#6C7EF7', 10],
+            ['吃太饱', '记录一次吃撑了', '#F9B536', 20]
+        ];
+    } else {
+        $defaults = [
+            ['撸管', '记录一次没忍住', '#F55F52', 10],
+            ['刷视频', '记录一次沉迷短视频', '#31B3C5', 20],
+            ['熬夜', '记录一次睡太晚', '#6C7EF7', 30],
+            ['吃太饱', '记录一次吃撑了', '#F9B536', 40]
+        ];
+    }
 
     $insert = $pdo->prepare("
         INSERT INTO bad_Behavior
@@ -91,7 +101,11 @@ try {
 
         $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
         $stmt->execute([':userId' => $user['userId']]);
-        badEnsureDefaultBehaviors($pdo, $user['userId']);
+        badEnsureDefaultBehaviors(
+            $pdo,
+            $user['userId'],
+            isset($data['platform']) ? $data['platform'] : (isset($user['platform']) ? $user['platform'] : '')
+        );
         badResponse(200, 'logOk', ['data' => $stmt->fetch()]);
     }
 
@@ -122,7 +136,11 @@ try {
     ]);
 
     $userId = $pdo->lastInsertId();
-    badEnsureDefaultBehaviors($pdo, $userId);
+    badEnsureDefaultBehaviors(
+        $pdo,
+        $userId,
+        isset($data['platform']) ? $data['platform'] : ''
+    );
     $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
     $stmt->execute([':userId' => $userId]);
     badResponse(200, 'regOk', ['data' => $stmt->fetch()]);

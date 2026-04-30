@@ -1,0 +1,117 @@
+<!-- 首页：闪屏、行为按钮、今日统计都集中在这里。 -->
+<view class="page">
+  <!-- 启动闪屏：逻辑与 iOS 一致，登录失败时继续停留在这里。 -->
+  <view wx:if="{{isSplashVisible}}" class="splash">
+    <view class="splash-glow splash-glow-a"></view>
+    <view class="splash-glow splash-glow-b"></view>
+
+    <view class="splash-brand">
+      <view class="splash-title">芽记</view>
+      <view class="splash-subtitle">
+        <text class="splash-subtitle-line">记录好习惯，然后成长一点</text>
+        <text class="splash-subtitle-line">记录坏习惯，然后少做一点</text>
+      </view>
+    </view>
+
+    <view class="splash-status">
+      <block wx:if="{{isLoading}}">
+        <view class="loading-dot"></view>
+        <text class="status-text">正在登录…</text>
+      </block>
+      <block wx:elif="{{errorMessage}}">
+        <text class="error-text">{{errorMessage}}</text>
+        <button class="retry-btn" bindtap="retryLogin">重试</button>
+      </block>
+      <block wx:else>
+        <view class="loading-dot"></view>
+      </block>
+    </view>
+  </view>
+
+  <block wx:else>
+    <!-- 顶部导航：只保留标题，避免自定义按钮和微信胶囊挤在同一行。 -->
+    <navigation-bar title="芽记" back="{{false}}" color="#142827" background="#F2FCF8"></navigation-bar>
+
+    <!-- 首页头部操作行：放到微信胶囊下方，避免与系统按钮重叠。 -->
+    <view class="top-actions">
+      <view class="nav-btn" bindtap="goAddBehavior">+</view>
+      <view class="nav-more" bindtap="goMore">⋮</view>
+    </view>
+
+    <scroll-view class="scrollarea" scroll-y>
+      <view class="content">
+        <!-- 当天概览。 -->
+        <view class="hero">
+          <view class="hero-title">今日行为记录</view>
+          <view class="hero-date">{{todayText}}</view>
+        </view>
+
+        <!-- 可点击记录的行为按钮列表。 -->
+        <view class="behavior-list">
+          <view
+            wx:for="{{behaviors}}"
+            wx:key="behaviorId"
+            class="behavior-card"
+            style="background: {{item.colorHex}};"
+            data-id="{{item.behaviorId}}"
+            bindtap="onBehaviorTap"
+            bindlongpress="onBehaviorLongPress"
+          >
+            <view class="behavior-name">{{item.behaviorName}}</view>
+            <view wx:if="{{item.behaviorDesc}}" class="behavior-desc">{{item.behaviorCardDesc}}</view>
+          </view>
+        </view>
+
+        <!-- 今日统计列表，点击后进入年/月/日详情。 -->
+        <view class="section-title">今天统计</view>
+        <view class="count-list">
+          <view
+            wx:for="{{todayCounts}}"
+            wx:key="id"
+            class="count-row"
+            data-id="{{item.behavior.behaviorId}}"
+            bindtap="goYearDetail"
+          >
+            <view class="color-dot" style="background: {{item.behavior.colorHex}};"></view>
+            <view class="count-info">
+              <view class="count-name">{{item.behavior.behaviorName}}</view>
+              <view wx:if="{{item.behavior.behaviorDesc}}" class="count-desc">{{item.behavior.countRowDesc}}</view>
+            </view>
+            <view class="count-value" style="color: {{item.behavior.colorHex}};">{{item.count}}<text>次</text></view>
+            <view class="chevron">›</view>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 点击行为后的确认记录弹窗。 -->
+    <view wx:if="{{pendingRecord}}" class="dialog-mask">
+      <view class="dialog-card">
+        <view class="dialog-bar" style="background: {{pendingRecord.colorHex}};"></view>
+        <view class="dialog-title">确认记录</view>
+        <view class="dialog-message">
+          确定要记录一次“<text style="color: {{pendingRecord.colorHex}};">{{pendingRecord.behaviorName}}</text>”吗？
+        </view>
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" bindtap="cancelDialog">取消</button>
+          <button class="dialog-btn main" style="background: {{pendingRecord.colorHex}};" bindtap="confirmRecord">确认记录</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 长按行为后的编辑 / 删除弹窗。 -->
+    <view wx:if="{{pendingAction}}" class="dialog-mask">
+      <view class="dialog-card">
+        <view class="dialog-bar" style="background: {{pendingAction.colorHex}};"></view>
+        <view class="dialog-title">管理行为项</view>
+        <view class="dialog-message">
+          你要编辑还是删除“<text style="color: {{pendingAction.colorHex}};">{{pendingAction.behaviorName}}</text>”？删除会连历史记录一起删除。
+        </view>
+        <view class="dialog-actions">
+          <button class="dialog-btn danger" bindtap="deleteBehavior">删除</button>
+          <button class="dialog-btn main" style="background: {{pendingAction.colorHex}};" bindtap="editBehavior">进入编辑</button>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

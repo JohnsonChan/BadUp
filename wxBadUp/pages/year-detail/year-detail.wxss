@@ -1,0 +1,116 @@
+/* 页面基础布局。 */
+page {
+  min-height: 100vh;
+  background: #f6fbf8;
+}
+
+.scrollarea {
+  height: calc(100vh - 96rpx);
+}
+
+.content {
+  padding: 30rpx;
+}
+
+/* 年份头部：左右切换按钮 + 中间标题。 */
+.year-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 24rpx 0 30rpx;
+}
+
+.round-btn {
+  width: 88rpx;
+  height: 72rpx;
+  line-height: 68rpx;
+  padding: 0;
+  border-radius: 999rpx;
+  color: #1f2d2b;
+  font-size: 44rpx;
+  font-weight: 800;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
+/* 中间年份标题和总计文案。 */
+.title-box {
+  flex: 1;
+  text-align: center;
+}
+
+.year-title {
+  color: #121d1b;
+  font-size: 54rpx;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.total-text {
+  margin-top: 8rpx;
+  color: #75827f;
+  font-size: 26rpx;
+  font-weight: 600;
+}
+
+.total-text {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  column-gap: 8rpx;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.total-name {
+  max-width: 100%;
+}
+
+.total-count-group {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.total-count-num {
+  margin: 0 8rpx;
+  font-weight: 900;
+}
+
+/* 月份卡片网格。 */
+.month-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.month-card {
+  width: 214rpx;
+  min-height: 190rpx;
+  margin-bottom: 20rpx;
+  padding: 24rpx;
+  border-radius: 30rpx;
+  background: rgba(0, 0, 0, 0.055);
+  box-sizing: border-box;
+}
+
+.month-name {
+  color: #1f2d2b;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+
+.month-count {
+  margin-top: 30rpx;
+  font-size: 50rpx;
+  font-weight: 900;
+}
+
+.month-tip {
+  margin-top: 6rpx;
+  color: #818d8b;
+  font-size: 22rpx;
+}

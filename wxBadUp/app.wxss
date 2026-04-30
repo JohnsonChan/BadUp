@@ -1,0 +1,11 @@
+/* 全局兜底容器样式。
+   当前项目主要使用页面级样式，这里保留微信默认模板里的 container。 */
+.container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 200rpx 0;
+  box-sizing: border-box;
+} 

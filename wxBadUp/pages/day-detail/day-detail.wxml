@@ -1,0 +1,27 @@
+<view class="page">
+  <navigation-bar title="{{dayTitle}}" color="#182827" background="#F6FBF8"></navigation-bar>
+  <scroll-view class="scrollarea" scroll-y>
+    <view class="content">
+      <!-- 日期标题和当天总计。 -->
+      <view class="day-title">{{dayTitle}}</view>
+      <view class="total-text">
+        <text class="total-name">{{behavior.behaviorName}}</text>
+        <view class="total-count-group">
+          <text>当天共</text>
+          <view class="total-count-num" style="color: {{behavior.colorHex}};">{{totalCount}}</view>
+          <text>次</text>
+        </view>
+      </view>
+
+      <!-- 24 小时时间轴。 -->
+      <view class="hour-list">
+        <view wx:for="{{hours}}" wx:key="hour" class="hour-row">
+          <view class="hour-text">{{item.hourText}}</view>
+          <view class="hour-line"></view>
+          <view wx:if="{{item.count > 0}}" class="hour-count" style="background: {{behavior.colorHex}};">{{item.count}}次</view>
+          <view wx:else class="no-count">无记录</view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

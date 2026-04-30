@@ -1,0 +1,45 @@
+<view class="page">
+  <navigation-bar title="{{year}}年{{month}}月" color="#182827" background="#F6FBF8"></navigation-bar>
+  <scroll-view class="scrollarea" scroll-y>
+    <view class="content">
+      <!-- 月标题和总计。 -->
+      <view class="month-head">
+        <view class="month-title">{{month}}月</view>
+        <view class="total-text">
+          <text class="total-name">{{behavior.behaviorName}}</text>
+          <view class="total-count-group">
+            <text>本月共</text>
+            <view class="total-count-num" style="color: {{behavior.colorHex}};">{{totalCount}}</view>
+            <text>次</text>
+          </view>
+        </view>
+      </view>
+
+      <!-- 月历视图：星期头 + 天格子。 -->
+      <view class="calendar">
+        <view class="weekday-row">
+          <view wx:for="{{weekdays}}" wx:key="*this" class="weekday">{{item}}</view>
+        </view>
+
+        <view class="day-grid">
+          <!-- 月初补齐的空白格。 -->
+          <view wx:for="{{leadingDays}}" wx:key="id" class="day-slot empty"></view>
+          <!-- 每一天的统计卡片。 -->
+          <view
+            wx:for="{{daySummaries}}"
+            wx:key="day"
+            class="day-slot"
+            data-day="{{item.day}}"
+            bindtap="goDay"
+          >
+            <view class="day-cell {{item.isToday ? 'today-cell' : ''}}">
+              <view class="day-num {{item.isToday ? 'today' : ''}}" style="{{item.dayStyle}}">{{item.day}}</view>
+              <view class="day-count" style="color: {{item.countColor}};">{{item.countText}}</view>
+              <view class="day-bar" style="background: {{item.barColor}};"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

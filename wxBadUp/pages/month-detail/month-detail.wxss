@@ -1,0 +1,132 @@
+/* 页面基础布局。 */
+page {
+  min-height: 100vh;
+  background: #f6fbf8;
+}
+
+.scrollarea {
+  height: calc(100vh - 96rpx);
+}
+
+.content {
+  padding: 30rpx 28rpx 60rpx;
+}
+
+/* 顶部月份标题和统计。 */
+.month-head {
+  margin: 18rpx 0 28rpx;
+}
+
+.month-title {
+  color: #121d1b;
+  font-size: 58rpx;
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.total-text {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 8rpx;
+  margin-top: 12rpx;
+  color: #75827f;
+  font-size: 27rpx;
+  font-weight: 650;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.total-name {
+  max-width: 100%;
+}
+
+.total-count-group {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.total-count-num {
+  margin: 0 8rpx;
+  font-weight: 900;
+}
+
+/* 月历主体。 */
+.calendar {
+  padding: 22rpx 16rpx 18rpx;
+  border-radius: 32rpx;
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.weekday-row,
+.day-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.weekday,
+.day-slot {
+  width: 14.2857%;
+  box-sizing: border-box;
+}
+
+.weekday {
+  margin-bottom: 14rpx;
+  text-align: center;
+  color: #77837f;
+  font-size: 22rpx;
+  font-weight: 800;
+}
+
+.day-slot {
+  padding: 5rpx;
+}
+
+.day-slot.empty {
+  height: 112rpx;
+}
+
+/* 每一天的格子。 */
+.day-cell {
+  min-height: 112rpx;
+  padding: 9rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.72);
+  box-sizing: border-box;
+}
+
+.day-cell.today-cell {
+  background: #fff;
+  box-shadow: 0 10rpx 24rpx rgba(0, 0, 0, 0.08);
+}
+
+.day-num {
+  width: 44rpx;
+  height: 44rpx;
+  line-height: 44rpx;
+  text-align: center;
+  color: #182827;
+  font-size: 25rpx;
+  font-weight: 850;
+  border-radius: 999rpx;
+}
+
+.day-num.today {
+  color: #fff;
+}
+
+.day-count {
+  margin-top: 12rpx;
+  min-height: 28rpx;
+  font-size: 19rpx;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.day-bar {
+  height: 7rpx;
+  margin-top: 9rpx;
+  border-radius: 999rpx;
+}

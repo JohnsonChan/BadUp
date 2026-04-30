@@ -1,0 +1,66 @@
+<view class="weui-navigation-bar {{extClass}}">
+  <view class="weui-navigation-bar__inner {{ios ? 'ios' : 'android'}}" style="color: {{color}}; background: {{background}}; {{displayStyle}}; {{safeAreaTop}};">
+
+    <!-- 左侧区域：
+         1. 默认返回按钮
+         2. 可选首页按钮
+         3. 若都不用，则渲染外部传入的 left slot -->
+    <view class='weui-navigation-bar__left' style="{{leftWidth}};">
+      <block wx:if="{{back || homeButton}}">
+        <block wx:if="{{back}}">
+          <view class="weui-navigation-bar__buttons weui-navigation-bar__buttons_goback">
+            <view
+              bindtap="back"
+              class="weui-navigation-bar__btn_goback_wrapper"
+              hover-class="weui-active"
+              hover-stay-time="100"
+              aria-role="button"
+              aria-label="返回"
+            >
+              <view class="weui-navigation-bar__button weui-navigation-bar__btn_goback"></view>
+            </view>
+          </view>
+        </block>
+        <block wx:if="{{homeButton}}">
+          <view class="weui-navigation-bar__buttons weui-navigation-bar__buttons_home">
+            <view
+              bindtap="home"
+              class="weui-navigation-bar__btn_home_wrapper"
+              hover-class="weui-active"
+              aria-role="button"
+              aria-label="首页"
+            >
+              <view class="weui-navigation-bar__button weui-navigation-bar__btn_home"></view>
+            </view>
+          </view>
+        </block>
+      </block>
+      <block wx:else>
+        <slot name="left"></slot>
+      </block>
+    </view>
+
+    <!-- 中间标题区域：
+         会根据右上角胶囊按钮动态预留左右安全距离。 -->
+    <view class='weui-navigation-bar__center' style="{{titlePadding}}">
+      <view wx:if="{{loading}}" class="weui-navigation-bar__loading" aria-role="alert">
+        <view
+          class="weui-loading"
+          aria-role="img"
+          aria-label="加载中"
+        ></view>
+      </view>
+      <block wx:if="{{title}}">
+        <text>{{title}}</text>
+      </block>
+      <block wx:else>
+        <slot name="center"></slot>
+      </block>
+    </view>
+
+    <!-- 右侧区域：给页面自定义更多按钮等操作位。 -->
+    <view class='weui-navigation-bar__right' style="{{rightStyle}}">
+      <slot name="right"></slot>
+    </view>
+  </view>
+</view>

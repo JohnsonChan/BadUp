@@ -1,0 +1,38 @@
+<view class="page">
+  <navigation-bar title="{{behavior.behaviorName}}" color="#182827" background="#F6FBF8"></navigation-bar>
+  <scroll-view class="scrollarea" scroll-y>
+    <view class="content">
+      <!-- 顶部年份切换和总计。 -->
+      <view class="year-head">
+        <view class="round-btn" bindtap="prevYear">‹</view>
+        <view class="title-box">
+          <view class="year-title">{{year}}年</view>
+          <view class="total-text">
+            <text class="total-name">{{behavior.behaviorName}}</text>
+            <view class="total-count-group">
+              <text>共</text>
+              <view class="total-count-num" style="color: {{behavior.colorHex}};">{{totalCount}}</view>
+              <text>次</text>
+            </view>
+          </view>
+        </view>
+        <view class="round-btn" bindtap="nextYear">›</view>
+      </view>
+
+      <!-- 12 个月概览卡片。 -->
+      <view class="month-grid">
+        <view
+          wx:for="{{summaries}}"
+          wx:key="month"
+          class="month-card"
+          data-month="{{item.month}}"
+          bindtap="goMonth"
+        >
+          <view class="month-name">{{item.month}}月</view>
+          <view class="month-count" style="color: {{behavior.colorHex}};">{{item.count}}</view>
+          <view class="month-tip">本月累计</view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+</view>

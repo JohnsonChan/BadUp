@@ -1,0 +1,21 @@
+<view class="page">
+  <navigation-bar title="更多" color="#182827" background="#F6FBF8"></navigation-bar>
+
+  <view class="content">
+    <!-- 当前登录用户的服务端信息。 -->
+    <view class="section-title">用户信息</view>
+    <view class="card">
+      <view class="row"><text>用户ID</text><text>{{user.userId || '-'}}</text></view>
+      <view class="row"><text>注册日期</text><text>{{registerDate}}</text></view>
+      <view class="row"><text>使用平台</text><text>微信小程序</text></view>
+      <view class="row"><text>AppVersion</text><text>{{user.appVersion || '-'}}</text></view>
+    </view>
+
+    <!-- 关于我们信息。 -->
+    <view class="section-title">关于我们</view>
+    <view class="card">
+      <view class="row"><text>联系我们</text><text>BooTry</text></view>
+      <view class="row"><text>ICP备案信息</text><text>粤ICP备19137866号-3</text></view>
+    </view>
+  </view>
+</view>
