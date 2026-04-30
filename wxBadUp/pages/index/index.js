@@ -35,6 +35,11 @@ Page({
 
     // 长按后会顺带触发 tap，这个字段用于屏蔽那一次误触。
     skipNextTapBehaviorId: null,
+
+    // 排序拖动状态：长按后拖动卡片时使用。
+    isSorting: false,
+    sortingBehaviorId: null,
+    isLongPressHolding: false,
   },
 
   onLoad() {
@@ -167,6 +172,7 @@ Page({
       countRowDesc: this.truncateText(behaviorDesc, countRowDescLimit),
       colorHex: item.colorHex || '#F55F52',
       behaviorType: Number(item.behaviorType) === 1 ? 1 : -1,
+      sortOrder: Number(item.sortOrder || 0),
     }
   },
 
@@ -205,6 +211,9 @@ Page({
   // 普通点击：弹出“确认记录”。
   onBehaviorTap(event) {
     const behaviorId = Number(event.currentTarget.dataset.id)
+    if (this.data.isSorting) {
+      return
+    }
     if (this.data.skipNextTapBehaviorId === behaviorId) {
       this.setData({ skipNextTapBehaviorId: null })
       return
@@ -215,22 +224,228 @@ Page({
     }
   },
 
-  // 长按：弹出“编辑/删除”。
-  // 同时短暂屏蔽一次 tap，避免长按后又立刻触发记录弹窗。
-  onBehaviorLongPress(event) {
+  // 记录按下位置。长按后如果移动就排序，不移动就进入编辑/删除。
+  onBehaviorTouchStart(event) {
+    const index = Number(event.currentTarget.dataset.index)
     const behaviorId = Number(event.currentTarget.dataset.id)
-    const behavior = this.data.behaviors.find((item) => item.behaviorId === behaviorId)
-    if (behavior) {
-      this.setData({
-        pendingAction: behavior,
-        skipNextTapBehaviorId: behaviorId,
-      })
-      setTimeout(() => {
-        if (this.data.skipNextTapBehaviorId === behaviorId) {
-          this.setData({ skipNextTapBehaviorId: null })
-        }
-      }, 500)
+    const touch = event.touches && event.touches[0]
+    if (!touch) {
+      return
     }
+
+    this.pressStartIndex = index
+    this.pressCurrentIndex = index
+    this.pressBehaviorId = behaviorId
+    this.pressStartY = touch.clientY
+    this.pressStartX = touch.clientX
+    this.isLongPressReady = false
+    this.didSortDrag = false
+    this.sortItemStep = 128
+
+    wx.createSelectorQuery()
+      .in(this)
+      .selectAll('.behavior-card')
+      .boundingClientRect((rects) => {
+        if (rects && rects.length > 1) {
+          this.sortItemStep = Math.max(80, rects[1].top - rects[0].top)
+        } else if (rects && rects.length === 1) {
+          this.sortItemStep = Math.max(80, rects[0].height + 22)
+        }
+      })
+      .exec()
+  },
+
+  // 长按只标记状态，等 touchend / touchmove 判断是编辑还是排序。
+  onBehaviorLongPress(event) {
+    if (this.data.isSorting) {
+      return
+    }
+    const behaviorId = Number(event.currentTarget.dataset.id)
+    const index = Number(event.currentTarget.dataset.index)
+    if (!this.data.behaviors[index]) {
+      return
+    }
+    const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0])
+
+    this.isLongPressReady = true
+    this.pressBehaviorId = behaviorId
+    this.pressStartIndex = index
+    this.pressCurrentIndex = index
+    if ((this.pressStartY === null || this.pressStartY === undefined) && touch) {
+      this.pressStartY = touch.clientY
+      this.pressStartX = touch.clientX
+    }
+    this.sortOriginalBehaviors = this.data.behaviors.slice()
+    this.sortOriginalTodayCounts = this.data.todayCounts.slice()
+    this.setData({
+      isLongPressHolding: true,
+      skipNextTapBehaviorId: behaviorId,
+    })
+  },
+
+  onBehaviorTouchMove(event) {
+    if (!this.isLongPressReady) {
+      return
+    }
+
+    const touch = event.touches && event.touches[0]
+    if (!touch || this.data.behaviors.length <= 1) {
+      return
+    }
+
+    const deltaY = touch.clientY - this.pressStartY
+    if (!this.data.isSorting && Math.abs(deltaY) < 18) {
+      return
+    }
+
+    if (!this.data.isSorting) {
+      this.didSortDrag = true
+      this.setData({
+        isSorting: true,
+        sortingBehaviorId: this.pressBehaviorId,
+      })
+    }
+
+    this.updateSortPosition(touch.clientY)
+  },
+
+  onBehaviorTouchEnd() {
+    if (this.data.isSorting) {
+      this.finishSort()
+      return
+    }
+
+    if (this.isLongPressReady && !this.didSortDrag) {
+      this.openBehaviorAction(this.pressBehaviorId)
+    }
+
+    this.resetPressState()
+    this.setData({ isLongPressHolding: false })
+  },
+
+  onBehaviorTouchCancel() {
+    if (this.data.isSorting) {
+      this.finishSort()
+      return
+    }
+    this.resetPressState()
+    this.setData({ isLongPressHolding: false })
+  },
+
+  updateSortPosition(currentY) {
+    if (!this.sortOriginalBehaviors) {
+      return
+    }
+
+    const total = this.sortOriginalBehaviors.length
+    const deltaY = currentY - this.pressStartY
+    const targetIndex = this.clampIndex(
+      this.pressStartIndex + Math.round(deltaY / this.sortItemStep),
+      total,
+    )
+    if (!Number.isFinite(targetIndex)) {
+      return
+    }
+
+    if (targetIndex === this.pressCurrentIndex) {
+      return
+    }
+
+    this.pressCurrentIndex = targetIndex
+    this.setData({
+      behaviors: this.moveItem(this.sortOriginalBehaviors, this.pressStartIndex, targetIndex),
+      todayCounts: this.moveItem(this.sortOriginalTodayCounts, this.pressStartIndex, targetIndex),
+    })
+  },
+
+  finishSort() {
+    if (!this.data.isSorting) {
+      return
+    }
+
+    const user = this.data.user
+    const sortingBehaviorId = this.data.sortingBehaviorId
+    const originalBehaviors = this.sortOriginalBehaviors || []
+    const originalTodayCounts = this.sortOriginalTodayCounts || []
+    const currentBehaviors = this.data.behaviors.slice()
+    const didChange = this.didOrderChange(originalBehaviors, currentBehaviors)
+
+    this.resetPressState()
+
+    this.setData({
+      isSorting: false,
+      sortingBehaviorId: null,
+      isLongPressHolding: false,
+    })
+
+    setTimeout(() => {
+      if (this.data.skipNextTapBehaviorId === sortingBehaviorId) {
+        this.setData({ skipNextTapBehaviorId: null })
+      }
+    }, 500)
+
+    if (!didChange || !user) {
+      return
+    }
+
+    api.updateBehaviorSort(user.userId, currentBehaviors.map((item) => item.behaviorId))
+      .catch((error) => {
+        this.setData({
+          behaviors: originalBehaviors,
+          todayCounts: originalTodayCounts,
+        })
+        wx.showToast({ title: error.message || '排序保存失败', icon: 'none' })
+      })
+  },
+
+  openBehaviorAction(behaviorId) {
+    const behavior = this.data.behaviors.find((item) => item.behaviorId === behaviorId)
+    if (!behavior) {
+      return
+    }
+
+    this.setData({
+      pendingAction: behavior,
+      skipNextTapBehaviorId: behaviorId,
+    })
+    setTimeout(() => {
+      if (this.data.skipNextTapBehaviorId === behaviorId) {
+        this.setData({ skipNextTapBehaviorId: null })
+      }
+    }, 500)
+  },
+
+  resetPressState() {
+    this.pressStartIndex = null
+    this.pressCurrentIndex = null
+    this.pressBehaviorId = null
+    this.pressStartY = null
+    this.pressStartX = null
+    this.sortItemStep = null
+    this.sortOriginalBehaviors = null
+    this.sortOriginalTodayCounts = null
+    this.isLongPressReady = false
+    this.didSortDrag = false
+  },
+
+  clampIndex(index, total) {
+    if (index < 0) return 0
+    if (index >= total) return total - 1
+    return index
+  },
+
+  moveItem(list, fromIndex, toIndex) {
+    const next = list.slice()
+    const moving = next.splice(fromIndex, 1)[0]
+    next.splice(toIndex, 0, moving)
+    return next
+  },
+
+  didOrderChange(oldList, newList) {
+    if (!oldList || oldList.length !== newList.length) {
+      return true
+    }
+    return oldList.some((item, index) => item.behaviorId !== newList[index].behaviorId)
   },
 
   // 关闭所有弹窗。

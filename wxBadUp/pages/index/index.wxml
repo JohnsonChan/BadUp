@@ -38,7 +38,7 @@
       <view class="nav-more" bindtap="goMore">⋮</view>
     </view>
 
-    <scroll-view class="scrollarea" scroll-y>
+    <scroll-view class="scrollarea" scroll-y="{{!isSorting && !isLongPressHolding}}">
       <view class="content">
         <!-- 当天概览。 -->
         <view class="hero">
@@ -51,14 +51,21 @@
           <view
             wx:for="{{behaviors}}"
             wx:key="behaviorId"
-            class="behavior-card"
+            class="behavior-card {{sortingBehaviorId === item.behaviorId ? 'sorting-card' : ''}}"
             style="background: {{item.colorHex}};"
             data-id="{{item.behaviorId}}"
+            data-index="{{index}}"
             bindtap="onBehaviorTap"
+            bindtouchstart="onBehaviorTouchStart"
+            bindtouchmove="onBehaviorTouchMove"
+            bindtouchend="onBehaviorTouchEnd"
+            bindtouchcancel="onBehaviorTouchCancel"
             bindlongpress="onBehaviorLongPress"
           >
-            <view class="behavior-name">{{item.behaviorName}}</view>
-            <view wx:if="{{item.behaviorDesc}}" class="behavior-desc">{{item.behaviorCardDesc}}</view>
+            <view class="behavior-main">
+              <view class="behavior-name">{{item.behaviorName}}</view>
+              <view wx:if="{{item.behaviorDesc}}" class="behavior-desc">{{item.behaviorCardDesc}}</view>
+            </view>
           </view>
         </view>
 

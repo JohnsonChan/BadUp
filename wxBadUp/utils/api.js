@@ -111,6 +111,11 @@ function deleteBehavior(userId, behaviorId) {
   return request('bad_BehaviorDelete.php', { userId, behaviorId })
 }
 
+// 更新行为项展示顺序。
+function updateBehaviorSort(userId, behaviorIds) {
+  return request('bad_BehaviorSortUpdate.php', { userId, behaviorIds })
+}
+
 // 追加一条行为记录。
 // clientUid 用来给服务端做幂等或排查时的客户端标识。
 function insertRecord(userId, behaviorId, recordDate, recordedAt) {
@@ -155,6 +160,7 @@ module.exports = {
   addBehavior,
   updateBehavior,
   deleteBehavior,
+  updateBehaviorSort,
   insertRecord,
   fetchYearStats,
   fetchMonthStats,

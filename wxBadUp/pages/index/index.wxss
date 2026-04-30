@@ -197,6 +197,20 @@ page {
   padding: 28rpx;
   border-radius: 30rpx;
   box-shadow: 0 18rpx 34rpx rgba(31, 40, 44, 0.12);
+  display: flex;
+  align-items: center;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.behavior-card.sorting-card {
+  transform: scale(1.02);
+  opacity: 0.92;
+  box-shadow: 0 24rpx 46rpx rgba(31, 40, 44, 0.18);
+}
+
+.behavior-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .behavior-name {
