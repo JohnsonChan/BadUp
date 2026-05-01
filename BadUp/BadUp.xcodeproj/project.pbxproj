@@ -29,9 +29,22 @@
 		41FED3D72F90C04C009BEC03 /* BadUpUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BadUpUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		7A9E4C8D2F8A4B6C9D0E1F23 /* Exceptions for "BadUp" folder in "BadUp" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				BadUpInfo.plist,
+			);
+			target = 41FED3BF2F90C04B009BEC03 /* BadUp */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		41FED3C22F90C04B009BEC03 /* BadUp */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				7A9E4C8D2F8A4B6C9D0E1F23 /* Exceptions for "BadUp" folder in "BadUp" target */,
+			);
 			path = BadUp;
 			sourceTree = "<group>";
 		};

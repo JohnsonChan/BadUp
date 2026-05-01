@@ -2577,7 +2577,6 @@ private struct BehaviorYearDetailView: View {
 
     init(behavior: BehaviorItem) {
         self.behavior = behavior
-        let year = Calendar.current.component(.year, from: Date())
         _viewModel = StateObject(wrappedValue: BehaviorYearViewModel(behavior: behavior))
     }
 
