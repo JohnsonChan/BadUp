@@ -47,7 +47,7 @@
 	<dict>
 		<key>NSExceptionDomains</key>
 		<dict>
-			<key>66zqx.com</key>
+			<key>shouzhuan007.com</key>
 			<dict>
 				<key>NSIncludesSubdomains</key>
 				<true/>

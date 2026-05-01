@@ -1,7 +1,7 @@
 // 后端接口封装。
 // iOS App 和小程序共用同一套 PHP 接口，方便后续维护数据一致性。
 
-const baseURL = 'http://66zqx.com/phpBadUp/'
+const baseURL = 'http://shouzhuan007.com/phpBadUp/'
 
 // 统一的 POST 请求入口：
 // 1. 发起请求

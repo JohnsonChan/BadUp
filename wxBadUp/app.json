@@ -3,6 +3,7 @@
     "pages/index/index",
     "pages/behavior-form/behavior-form",
     "pages/more/more",
+    "pages/beian-web/beian-web",
     "pages/growth-web/growth-web",
     "pages/year-detail/year-detail",
     "pages/month-detail/month-detail",

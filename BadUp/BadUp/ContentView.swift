@@ -1537,6 +1537,8 @@ private struct TotalCountText: View {
 // 更多页面。
 // 展示当前登录用户的种子信息和 App 基本信息。
 private struct MoreView: View {
+    @Environment(\.openURL) private var openURL
+
     let user: BadUpUser?
 
     @State private var behaviorScore: Int?
@@ -1544,34 +1546,54 @@ private struct MoreView: View {
     @State private var isShowingCopyConfirmation = false
 
     private let contactText = "BooTry"
+    private let icpText = "粤ICP备19008987号-1"
+    private let beianURL = URL(string: "https://beian.miit.gov.cn/")!
 
     var body: some View {
-        List {
-            Section("种子信息") {
-                InfoRow(title: "种子编号", value: user.map { String($0.userId) } ?? "-")
-                NavigationLink {
-                    GrowthIndexView(index: behaviorScore ?? 0)
-                } label: {
-                    InfoRow(
-                        title: "生长指数",
-                        value: scoreText,
-                        valueColor: scoreColor
-                    )
+        VStack(spacing: 0) {
+            List {
+                Section("种子信息") {
+                    InfoRow(title: "种子编号", value: user.map { String($0.userId) } ?? "-")
+                    NavigationLink {
+                        GrowthIndexView(index: behaviorScore ?? 0)
+                    } label: {
+                        InfoRow(
+                            title: "生长指数",
+                            value: scoreText,
+                            valueColor: scoreColor
+                        )
+                    }
+                    InfoRow(title: "播种日期", value: formattedCreatedAt)
+                    InfoRow(title: "发芽土地", value: platformDisplayName)
                 }
-                InfoRow(title: "播种日期", value: formattedCreatedAt)
-                InfoRow(title: "发芽土地", value: platformDisplayName)
+
+                Section("关于芽记") {
+                    InfoRow(title: "当前版本", value: currentAppVersion)
+                    Button {
+                        copyContactText()
+                    } label: {
+                        CopyableInfoRow(title: "联系我们", value: contactText)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
 
-            Section("关于芽记") {
-                InfoRow(title: "当前版本", value: currentAppVersion)
-                Button {
-                    copyContactText()
-                } label: {
-                    CopyableInfoRow(title: "联系我们", value: contactText)
+            Button {
+                openURL(beianURL)
+            } label: {
+                HStack(spacing: 4) {
+                    Text("ICP备案信息：\(icpText)")
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
                 }
-                .buttonStyle(.plain)
-                InfoRow(title: "ICP备案信息", value: "粤ICP备19137866号-3")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.top, 10)
+                .padding(.bottom, 18)
+                .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.plain)
+            .background(Color(uiColor: .systemGroupedBackground))
         }
         .navigationTitle("关于芽记")
         .navigationBarTitleDisplayMode(.inline)

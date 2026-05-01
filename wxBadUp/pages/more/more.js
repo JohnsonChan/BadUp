@@ -2,6 +2,7 @@ const api = require('../../utils/api')
 
 const app = getApp()
 const contactText = 'BooTry'
+const beianURL = 'https://beian.miit.gov.cn/'
 
 Page({
   data: {
@@ -64,6 +65,13 @@ Page({
       fail: () => {
         wx.showToast({ title: '复制失败', icon: 'none' })
       },
+    })
+  },
+
+  // 点击备案号时进入工信部备案查询网页。
+  openBeianPage() {
+    wx.navigateTo({
+      url: `/pages/beian-web/beian-web?url=${encodeURIComponent(beianURL)}`,
     })
   },
 

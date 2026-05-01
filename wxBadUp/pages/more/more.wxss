@@ -4,7 +4,14 @@ page {
   background: #f6fbf8;
 }
 
+.page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .content {
+  flex: 1;
   padding: 30rpx;
 }
 
@@ -74,4 +81,24 @@ page {
 .muted {
   color: #7a8784;
   font-size: 27rpx;
+}
+
+/* 底部备案入口，参考微信“关于”页的弱化信息展示。 */
+.beian-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  padding: 28rpx 30rpx calc(34rpx + env(safe-area-inset-bottom));
+  color: #a8b1af;
+  font-size: 24rpx;
+}
+
+.beian-footer-hover {
+  opacity: 0.65;
+}
+
+.beian-arrow {
+  font-size: 30rpx;
+  line-height: 1;
 }
