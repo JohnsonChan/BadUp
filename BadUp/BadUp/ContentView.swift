@@ -1268,6 +1268,8 @@ private struct BehaviorButtonRow: View {
     let onLongPress: () -> Void
     let onLongDragEnd: (CGFloat) -> Void
 
+    @State private var isLongPressActive = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(behavior.name)
@@ -1289,6 +1291,15 @@ private struct BehaviorButtonRow: View {
         .padding()
         .background(behavior.tintColor.gradient)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .scaleEffect(isLongPressActive ? 1.035 : 1)
+        .shadow(
+            color: isLongPressActive ? behavior.tintColor.opacity(0.36) : .clear,
+            radius: isLongPressActive ? 16 : 0,
+            x: 0,
+            y: isLongPressActive ? 10 : 0
+        )
+        .zIndex(isLongPressActive ? 10 : 0)
+        .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isLongPressActive)
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             LongPressDragGestureBridge(
@@ -1296,7 +1307,10 @@ private struct BehaviorButtonRow: View {
                 dragThreshold: 28,
                 onTap: onTap,
                 onLongPress: onLongPress,
-                onLongDragEnd: onLongDragEnd
+                onLongDragEnd: onLongDragEnd,
+                onPressStateChange: { isActive in
+                    isLongPressActive = isActive
+                }
             )
         }
     }
@@ -1309,6 +1323,7 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
     let onTap: () -> Void
     let onLongPress: () -> Void
     let onLongDragEnd: (CGFloat) -> Void
+    let onPressStateChange: (Bool) -> Void
 
     func makeUIView(context: Context) -> UIView {
         let view = UIView()
@@ -1340,6 +1355,7 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
         context.coordinator.onTap = onTap
         context.coordinator.onLongPress = onLongPress
         context.coordinator.onLongDragEnd = onLongDragEnd
+        context.coordinator.onPressStateChange = onPressStateChange
         if let longPressGesture = uiView.gestureRecognizers?.compactMap({ $0 as? UILongPressGestureRecognizer }).first {
             longPressGesture.minimumPressDuration = minimumPressDuration
             longPressGesture.allowableMovement = 22
@@ -1347,6 +1363,7 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.onPressStateChange(false)
         coordinator.setContainingScrollViewEnabled(from: uiView, isEnabled: true)
     }
 
@@ -1355,7 +1372,8 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
             dragThreshold: dragThreshold,
             onTap: onTap,
             onLongPress: onLongPress,
-            onLongDragEnd: onLongDragEnd
+            onLongDragEnd: onLongDragEnd,
+            onPressStateChange: onPressStateChange
         )
     }
 
@@ -1364,6 +1382,7 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
         var onTap: () -> Void
         var onLongPress: () -> Void
         var onLongDragEnd: (CGFloat) -> Void
+        var onPressStateChange: (Bool) -> Void
 
         private var startPoint: CGPoint = .zero
         private var latestTranslation: CGSize = .zero
@@ -1372,12 +1391,14 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
             dragThreshold: CGFloat,
             onTap: @escaping () -> Void,
             onLongPress: @escaping () -> Void,
-            onLongDragEnd: @escaping (CGFloat) -> Void
+            onLongDragEnd: @escaping (CGFloat) -> Void,
+            onPressStateChange: @escaping (Bool) -> Void
         ) {
             self.dragThreshold = dragThreshold
             self.onTap = onTap
             self.onLongPress = onLongPress
             self.onLongDragEnd = onLongDragEnd
+            self.onPressStateChange = onPressStateChange
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {
@@ -1394,6 +1415,7 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
             case .began:
                 startPoint = point
                 latestTranslation = .zero
+                onPressStateChange(true)
                 setContainingScrollViewEnabled(from: gesture.view, isEnabled: false)
             case .changed:
                 latestTranslation = CGSize(
@@ -1411,9 +1433,11 @@ private struct LongPressDragGestureBridge: UIViewRepresentable {
                     onLongPress()
                 }
                 latestTranslation = .zero
+                onPressStateChange(false)
                 setContainingScrollViewEnabled(from: gesture.view, isEnabled: true)
             case .cancelled, .failed:
                 latestTranslation = .zero
+                onPressStateChange(false)
                 setContainingScrollViewEnabled(from: gesture.view, isEnabled: true)
             default:
                 break
