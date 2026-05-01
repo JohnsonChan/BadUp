@@ -7,7 +7,6 @@
 
 import SwiftUI
 import Combine
-import SQLite3
 import UIKit
 
 // 更丰富的颜色板项。
@@ -195,430 +194,6 @@ private struct HourSummary: Identifiable {
 
     var hourText: String {
         String(format: "%02d:00", hour)
-    }
-}
-
-// SQLite 数据库封装。
-// 这里同时管理“习惯表”和“记录表”。
-private final class BehaviorDatabase {
-    private var db: OpaquePointer?
-
-    private let calendar: Calendar = {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "zh_CN")
-        calendar.timeZone = .current
-        return calendar
-    }()
-
-    private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter
-    }()
-
-    private let dateTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.timeZone = .current
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter
-    }()
-
-    private let recordedAtExpression = "COALESCE(recorded_at, record_date || ' 12:00:00')"
-
-    init() {
-        openDatabase()
-        createBehaviorTableIfNeeded()
-        createRecordTableIfNeeded()
-        addRecordedAtColumnIfNeeded()
-        seedDefaultBehaviors()
-    }
-
-    deinit {
-        sqlite3_close(db)
-    }
-
-    // 读取所有习惯项，按创建顺序展示。
-    func fetchBehaviors() -> [BehaviorItem] {
-        let sql = """
-        SELECT id, name, detail, color_hex
-        FROM behaviors
-        ORDER BY id ASC;
-        """
-        var statement: OpaquePointer?
-        var items: [BehaviorItem] = []
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("fetch behaviors prepare failed")
-            return []
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        while sqlite3_step(statement) == SQLITE_ROW {
-            let id = sqlite3_column_int64(statement, 0)
-            let name = String(cString: sqlite3_column_text(statement, 1))
-            let detail = sqlite3_column_text(statement, 2).map { String(cString: $0) } ?? ""
-            let colorHex = sqlite3_column_text(statement, 3).map { String(cString: $0) } ?? BehaviorColorOption.coral.rawValue
-            items.append(BehaviorItem(id: id, userId: nil, name: name, detail: detail, colorHex: colorHex))
-        }
-
-        return items
-    }
-
-    // 新增自定义习惯项。
-    func addBehavior(name: String, detail: String, colorHex: String) -> Bool {
-        let sql = """
-        INSERT INTO behaviors (name, detail, color_hex)
-        VALUES (?, ?, ?);
-        """
-        var statement: OpaquePointer?
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("add behavior prepare failed")
-            return false
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        sqlite3_bind_text(statement, 1, (name as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 2, (detail as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 3, (colorHex as NSString).utf8String, -1, nil)
-
-        return sqlite3_step(statement) == SQLITE_DONE
-    }
-
-    // 更新习惯项。
-    // 因为本地记录表当前用习惯名称做关联，所以改名时要同步更新历史记录里的 behavior_type。
-    func updateBehavior(id: Int64, name: String, detail: String, colorHex: String) -> Bool {
-        guard let oldBehavior = fetchBehaviors().first(where: { $0.id == id }) else {
-            return false
-        }
-
-        guard sqlite3_exec(db, "BEGIN TRANSACTION;", nil, nil, nil) == SQLITE_OK else {
-            return false
-        }
-
-        let updateBehaviorSQL = """
-        UPDATE behaviors
-        SET name = ?, detail = ?, color_hex = ?
-        WHERE id = ?;
-        """
-        var updateBehaviorStatement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, updateBehaviorSQL, -1, &updateBehaviorStatement, nil) == SQLITE_OK else {
-            sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
-            return false
-        }
-
-        sqlite3_bind_text(updateBehaviorStatement, 1, (name as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(updateBehaviorStatement, 2, (detail as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(updateBehaviorStatement, 3, (colorHex as NSString).utf8String, -1, nil)
-        sqlite3_bind_int64(updateBehaviorStatement, 4, id)
-        let behaviorUpdated = sqlite3_step(updateBehaviorStatement) == SQLITE_DONE
-        sqlite3_finalize(updateBehaviorStatement)
-
-        guard behaviorUpdated else {
-            sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
-            return false
-        }
-
-        if oldBehavior.name != name {
-            let updateRecordsSQL = "UPDATE behavior_records SET behavior_type = ? WHERE behavior_type = ?;"
-            var updateRecordsStatement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, updateRecordsSQL, -1, &updateRecordsStatement, nil) == SQLITE_OK else {
-                sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
-                return false
-            }
-
-            sqlite3_bind_text(updateRecordsStatement, 1, (name as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(updateRecordsStatement, 2, (oldBehavior.name as NSString).utf8String, -1, nil)
-            let recordsUpdated = sqlite3_step(updateRecordsStatement) == SQLITE_DONE
-            sqlite3_finalize(updateRecordsStatement)
-
-            guard recordsUpdated else {
-                sqlite3_exec(db, "ROLLBACK;", nil, nil, nil)
-                return false
-            }
-        }
-
-        return sqlite3_exec(db, "COMMIT;", nil, nil, nil) == SQLITE_OK
-    }
-
-    // 删除习惯项，同时把它的历史记录一并删除。
-    func deleteBehavior(id: Int64) -> Bool {
-        guard let behavior = fetchBehaviors().first(where: { $0.id == id }) else {
-            return false
-        }
-
-        let deleteRecordsSQL = "DELETE FROM behavior_records WHERE behavior_type = ?;"
-        var deleteRecordsStatement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, deleteRecordsSQL, -1, &deleteRecordsStatement, nil) == SQLITE_OK else {
-            return false
-        }
-
-        sqlite3_bind_text(deleteRecordsStatement, 1, (behavior.name as NSString).utf8String, -1, nil)
-        let recordsDeleted = sqlite3_step(deleteRecordsStatement) == SQLITE_DONE
-        sqlite3_finalize(deleteRecordsStatement)
-
-        guard recordsDeleted else {
-            return false
-        }
-
-        let deleteBehaviorSQL = "DELETE FROM behaviors WHERE id = ?;"
-        var deleteBehaviorStatement: OpaquePointer?
-        guard sqlite3_prepare_v2(db, deleteBehaviorSQL, -1, &deleteBehaviorStatement, nil) == SQLITE_OK else {
-            return false
-        }
-
-        sqlite3_bind_int64(deleteBehaviorStatement, 1, id)
-        let behaviorDeleted = sqlite3_step(deleteBehaviorStatement) == SQLITE_DONE
-        sqlite3_finalize(deleteBehaviorStatement)
-
-        return behaviorDeleted
-    }
-
-    // 写入一次习惯记录。
-    func insertRecord(for behavior: BehaviorItem, on date: Date = Date()) {
-        let sql = """
-        INSERT INTO behavior_records (record_date, recorded_at, behavior_type, count)
-        VALUES (?, ?, ?, 1);
-        """
-        var statement: OpaquePointer?
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("insert prepare failed")
-            return
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        let dateString = dateFormatter.string(from: date)
-        let dateTimeString = dateTimeFormatter.string(from: date)
-        sqlite3_bind_text(statement, 1, (dateString as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 2, (dateTimeString as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 3, (behavior.name as NSString).utf8String, -1, nil)
-
-        if sqlite3_step(statement) != SQLITE_DONE {
-            print("insert step failed")
-        }
-    }
-
-    // 查询今天所有习惯的次数。
-    func fetchTodayCounts(for behaviors: [BehaviorItem], on date: Date = Date()) -> [DailyBehaviorCount] {
-        let sql = """
-        SELECT behavior_type, SUM(count)
-        FROM behavior_records
-        WHERE record_date = ?
-        GROUP BY behavior_type;
-        """
-        var statement: OpaquePointer?
-        var counts = Dictionary(uniqueKeysWithValues: behaviors.map { ($0.name, 0) })
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("fetch today prepare failed")
-            return behaviors.map { DailyBehaviorCount(behavior: $0, count: 0) }
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        let dateString = dateFormatter.string(from: date)
-        sqlite3_bind_text(statement, 1, (dateString as NSString).utf8String, -1, nil)
-
-        while sqlite3_step(statement) == SQLITE_ROW {
-            guard let behaviorTypeCString = sqlite3_column_text(statement, 0) else {
-                continue
-            }
-            let name = String(cString: behaviorTypeCString)
-            counts[name] = Int(sqlite3_column_int(statement, 1))
-        }
-
-        return behaviors.map { DailyBehaviorCount(behavior: $0, count: counts[$0.name, default: 0]) }
-    }
-
-    func fetchMonthSummaries(for behavior: BehaviorItem, year: Int) -> [MonthSummary] {
-        let sql = """
-        SELECT CAST(strftime('%m', \(recordedAtExpression)) AS INTEGER), SUM(count)
-        FROM behavior_records
-        WHERE behavior_type = ?
-          AND CAST(strftime('%Y', \(recordedAtExpression)) AS INTEGER) = ?
-        GROUP BY 1
-        ORDER BY 1;
-        """
-        var statement: OpaquePointer?
-        var counts = Dictionary(uniqueKeysWithValues: (1...12).map { ($0, 0) })
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("year summary prepare failed")
-            return (1...12).map { MonthSummary(month: $0, count: 0) }
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        sqlite3_bind_text(statement, 1, (behavior.name as NSString).utf8String, -1, nil)
-        sqlite3_bind_int(statement, 2, Int32(year))
-
-        while sqlite3_step(statement) == SQLITE_ROW {
-            counts[Int(sqlite3_column_int(statement, 0))] = Int(sqlite3_column_int(statement, 1))
-        }
-
-        return (1...12).map { MonthSummary(month: $0, count: counts[$0, default: 0]) }
-    }
-
-    func fetchDaySummaries(for behavior: BehaviorItem, year: Int, month: Int) -> [DaySummary] {
-        guard
-            let monthStart = calendar.date(from: DateComponents(year: year, month: month, day: 1)),
-            let dayRange = calendar.range(of: .day, in: .month, for: monthStart)
-        else {
-            return []
-        }
-
-        let sql = """
-        SELECT CAST(strftime('%d', \(recordedAtExpression)) AS INTEGER), SUM(count)
-        FROM behavior_records
-        WHERE behavior_type = ?
-          AND strftime('%Y', \(recordedAtExpression)) = ?
-          AND strftime('%m', \(recordedAtExpression)) = ?
-        GROUP BY 1
-        ORDER BY 1;
-        """
-        var statement: OpaquePointer?
-        var counts = Dictionary(uniqueKeysWithValues: dayRange.map { ($0, 0) })
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("month summary prepare failed")
-            return dayRange.compactMap { day in
-                calendar.date(from: DateComponents(year: year, month: month, day: day)).map {
-                    DaySummary(date: $0, day: day, count: 0)
-                }
-            }
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        let yearString = String(format: "%04d", year)
-        let monthString = String(format: "%02d", month)
-        sqlite3_bind_text(statement, 1, (behavior.name as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 2, (yearString as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 3, (monthString as NSString).utf8String, -1, nil)
-
-        while sqlite3_step(statement) == SQLITE_ROW {
-            counts[Int(sqlite3_column_int(statement, 0))] = Int(sqlite3_column_int(statement, 1))
-        }
-
-        return dayRange.compactMap { day in
-            calendar.date(from: DateComponents(year: year, month: month, day: day)).map {
-                DaySummary(date: $0, day: day, count: counts[day, default: 0])
-            }
-        }
-    }
-
-    func fetchHourSummaries(for behavior: BehaviorItem, date: Date) -> [HourSummary] {
-        let sql = """
-        SELECT CAST(strftime('%H', \(recordedAtExpression)) AS INTEGER), SUM(count)
-        FROM behavior_records
-        WHERE behavior_type = ?
-          AND strftime('%Y-%m-%d', \(recordedAtExpression)) = ?
-        GROUP BY 1
-        ORDER BY 1;
-        """
-        var statement: OpaquePointer?
-        var counts = Dictionary(uniqueKeysWithValues: (0...23).map { ($0, 0) })
-
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            print("day summary prepare failed")
-            return (0...23).map { HourSummary(hour: $0, count: 0) }
-        }
-
-        defer { sqlite3_finalize(statement) }
-
-        let dayString = dateFormatter.string(from: date)
-        sqlite3_bind_text(statement, 1, (behavior.name as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 2, (dayString as NSString).utf8String, -1, nil)
-
-        while sqlite3_step(statement) == SQLITE_ROW {
-            counts[Int(sqlite3_column_int(statement, 0))] = Int(sqlite3_column_int(statement, 1))
-        }
-
-        return (0...23).map { HourSummary(hour: $0, count: counts[$0, default: 0]) }
-    }
-
-    private func openDatabase() {
-        let fileURL = Self.databaseURL()
-        if sqlite3_open(fileURL.path, &db) != SQLITE_OK {
-            print("open database failed")
-        }
-    }
-
-    private func createBehaviorTableIfNeeded() {
-        let sql = """
-        CREATE TABLE IF NOT EXISTS behaviors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            detail TEXT NOT NULL DEFAULT '',
-            color_hex TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        """
-
-        if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
-            print("create behaviors table failed")
-        }
-    }
-
-    private func createRecordTableIfNeeded() {
-        let sql = """
-        CREATE TABLE IF NOT EXISTS behavior_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            record_date TEXT NOT NULL,
-            recorded_at TEXT,
-            behavior_type TEXT NOT NULL,
-            count INTEGER NOT NULL DEFAULT 1
-        );
-        """
-
-        if sqlite3_exec(db, sql, nil, nil, nil) != SQLITE_OK {
-            print("create records table failed")
-        }
-    }
-
-    private func addRecordedAtColumnIfNeeded() {
-        let sql = "ALTER TABLE behavior_records ADD COLUMN recorded_at TEXT;"
-        sqlite3_exec(db, sql, nil, nil, nil)
-    }
-
-    // 首次运行时写入默认的习惯项。
-    private func seedDefaultBehaviors() {
-        let defaults: [(String, String, String)] = [
-            ("运动", "记录一次运动", BehaviorColorOption.green.rawValue),
-            ("学习", "记录一次学习", BehaviorColorOption.cyan.rawValue),
-            ("熬夜", "记录一次睡太晚", BehaviorColorOption.blue.rawValue)
-        ]
-
-        for item in defaults {
-            let sql = """
-            INSERT OR IGNORE INTO behaviors (name, detail, color_hex)
-            VALUES (?, ?, ?);
-            """
-            var statement: OpaquePointer?
-            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                continue
-            }
-
-            sqlite3_bind_text(statement, 1, (item.0 as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statement, 2, (item.1 as NSString).utf8String, -1, nil)
-            sqlite3_bind_text(statement, 3, (item.2 as NSString).utf8String, -1, nil)
-            sqlite3_step(statement)
-            sqlite3_finalize(statement)
-        }
-    }
-
-    private static func databaseURL() -> URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        return documentsURL.appendingPathComponent("behavior_records.sqlite")
     }
 }
 
@@ -1942,6 +1517,9 @@ private struct MoreView: View {
 
     @State private var behaviorScore: Int?
     @State private var scoreLoadError: String?
+    @State private var isShowingCopyConfirmation = false
+
+    private let contactText = "BooTry"
 
     var body: some View {
         List {
@@ -1962,12 +1540,22 @@ private struct MoreView: View {
 
             Section("关于芽记") {
                 InfoRow(title: "当前版本", value: currentAppVersion)
-                InfoRow(title: "联系我们", value: "BooTry")
+                Button {
+                    copyContactText()
+                } label: {
+                    CopyableInfoRow(title: "联系我们", value: contactText)
+                }
+                .buttonStyle(.plain)
                 InfoRow(title: "ICP备案信息", value: "粤ICP备19137866号-3")
             }
         }
         .navigationTitle("关于芽记")
         .navigationBarTitleDisplayMode(.inline)
+        .alert("已复制", isPresented: $isShowingCopyConfirmation) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text("已复制 \(contactText)")
+        }
         .task(id: user?.userId) {
             await loadBehaviorScore()
         }
@@ -2026,6 +1614,11 @@ private struct MoreView: View {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "-"
     }
 
+    private func copyContactText() {
+        UIPasteboard.general.string = contactText
+        isShowingCopyConfirmation = true
+    }
+
     private func loadBehaviorScore() async {
         guard let userId = user?.userId else {
             behaviorScore = 0
@@ -2039,6 +1632,29 @@ private struct MoreView: View {
             behaviorScore = nil
             scoreLoadError = error.localizedDescription
         }
+    }
+}
+
+private struct CopyableInfoRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .frame(width: 110, alignment: .leading)
+
+            Text(value)
+                .fontWeight(.medium)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "doc.on.doc")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .contentShape(Rectangle())
     }
 }
 
@@ -2167,63 +1783,340 @@ private struct GrowthPlantIllustration: View {
     let stageIndex: Int
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color(red: 0.94, green: 0.98, blue: 0.93))
-                .frame(width: 260, height: 260)
+        Canvas { context, size in
+            drawBackground(in: size, context: &context)
+            drawSoil(in: size, context: &context)
 
-            if stageIndex == 0 {
-                Capsule()
-                    .fill(Color(red: 0.46, green: 0.30, blue: 0.16))
-                    .frame(width: 54, height: 34)
-                    .rotationEffect(.degrees(-16))
-                    .offset(y: 52)
+            if stageIndex <= 0 {
+                drawSeed(in: size, context: &context)
+            } else if stageIndex == 1 {
+                drawSprout(in: size, context: &context)
             } else {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(red: 0.44, green: 0.29, blue: 0.17))
-                    .frame(width: CGFloat(10 + stageIndex * 2), height: CGFloat(78 + stageIndex * 10))
-                    .offset(y: CGFloat(48 - stageIndex * 6))
-
-                ForEach(0..<leafCount, id: \.self) { index in
-                    LeafShape()
-                        .fill(leafColor(for: index))
-                        .frame(width: leafSize(for: index).width, height: leafSize(for: index).height)
-                        .rotationEffect(.degrees(index.isMultiple(of: 2) ? -34 : 34))
-                        .offset(x: leafOffset(for: index).x, y: leafOffset(for: index).y)
-                }
+                drawTree(in: size, context: &context)
             }
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
 
-            Capsule()
-                .fill(Color(red: 0.64, green: 0.78, blue: 0.58).opacity(0.35))
-                .frame(width: 170, height: 18)
-                .offset(y: 106)
+    private var clampedStage: Int {
+        min(max(stageIndex, 0), 9)
+    }
+
+    private func drawBackground(in size: CGSize, context: inout GraphicsContext) {
+        let side = min(size.width, size.height)
+        let rect = CGRect(
+            x: (size.width - side) / 2 + side * 0.04,
+            y: (size.height - side) / 2 + side * 0.04,
+            width: side * 0.92,
+            height: side * 0.92
+        )
+        let glowRect = rect.insetBy(dx: -side * 0.03, dy: -side * 0.03)
+
+        context.fill(
+            Path(ellipseIn: glowRect),
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color(red: 0.92, green: 0.98, blue: 0.90),
+                    Color(red: 0.98, green: 1.00, blue: 0.96)
+                ]),
+                startPoint: CGPoint(x: glowRect.minX, y: glowRect.minY),
+                endPoint: CGPoint(x: glowRect.maxX, y: glowRect.maxY)
+            )
+        )
+
+        context.stroke(
+            Path(ellipseIn: rect),
+            with: .color(Color.white.opacity(0.85)),
+            lineWidth: 1.2
+        )
+    }
+
+    private func drawSoil(in size: CGSize, context: inout GraphicsContext) {
+        let side = min(size.width, size.height)
+        let soilRect = CGRect(
+            x: size.width * 0.23,
+            y: size.height * 0.75,
+            width: size.width * 0.54,
+            height: side * 0.08
+        )
+        let shadowRect = soilRect.offsetBy(dx: 0, dy: side * 0.025).insetBy(dx: -side * 0.02, dy: 0)
+
+        context.fill(
+            Path(ellipseIn: shadowRect),
+            with: .color(Color(red: 0.36, green: 0.52, blue: 0.30).opacity(0.16))
+        )
+        context.fill(
+            Path(ellipseIn: soilRect),
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color(red: 0.36, green: 0.25, blue: 0.14),
+                    Color(red: 0.65, green: 0.45, blue: 0.24),
+                    Color(red: 0.28, green: 0.20, blue: 0.12)
+                ]),
+                startPoint: CGPoint(x: soilRect.minX, y: soilRect.minY),
+                endPoint: CGPoint(x: soilRect.maxX, y: soilRect.maxY)
+            )
+        )
+    }
+
+    private func drawSeed(in size: CGSize, context: inout GraphicsContext) {
+        let side = min(size.width, size.height)
+        drawLeaf(
+            center: CGPoint(x: size.width * 0.50, y: size.height * 0.72),
+            size: CGSize(width: side * 0.20, height: side * 0.12),
+            angle: -18,
+            baseColor: Color(red: 0.50, green: 0.31, blue: 0.16),
+            highlightColor: Color(red: 0.82, green: 0.57, blue: 0.30),
+            context: &context
+        )
+    }
+
+    private func drawSprout(in size: CGSize, context: inout GraphicsContext) {
+        let side = min(size.width, size.height)
+        let base = CGPoint(x: size.width * 0.50, y: size.height * 0.76)
+        let top = CGPoint(x: size.width * 0.50, y: size.height * 0.56)
+
+        var stem = Path()
+        stem.move(to: base)
+        stem.addCurve(
+            to: top,
+            control1: CGPoint(x: size.width * 0.55, y: size.height * 0.68),
+            control2: CGPoint(x: size.width * 0.46, y: size.height * 0.61)
+        )
+        context.stroke(
+            stem,
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color(red: 0.33, green: 0.54, blue: 0.20),
+                    Color(red: 0.53, green: 0.78, blue: 0.31)
+                ]),
+                startPoint: base,
+                endPoint: top
+            ),
+            style: StrokeStyle(lineWidth: side * 0.025, lineCap: .round)
+        )
+
+        drawLeaf(
+            center: CGPoint(x: size.width * 0.45, y: size.height * 0.55),
+            size: CGSize(width: side * 0.20, height: side * 0.11),
+            angle: -30,
+            baseColor: Color(red: 0.25, green: 0.64, blue: 0.25),
+            highlightColor: Color(red: 0.70, green: 0.91, blue: 0.45),
+            context: &context
+        )
+        drawLeaf(
+            center: CGPoint(x: size.width * 0.56, y: size.height * 0.54),
+            size: CGSize(width: side * 0.22, height: side * 0.12),
+            angle: 28,
+            baseColor: Color(red: 0.29, green: 0.70, blue: 0.30),
+            highlightColor: Color(red: 0.74, green: 0.94, blue: 0.48),
+            context: &context
+        )
+    }
+
+    private func drawTree(in size: CGSize, context: inout GraphicsContext) {
+        let side = min(size.width, size.height)
+        let stage = CGFloat(clampedStage)
+        let base = CGPoint(x: size.width * 0.50, y: size.height * 0.77)
+        let top = CGPoint(x: size.width * (0.49 + stage * 0.002), y: size.height * (0.55 - stage * 0.028))
+        let baseWidth = side * (0.030 + stage * 0.005)
+        let topWidth = side * (0.012 + stage * 0.002)
+
+        var trunk = Path()
+        trunk.move(to: CGPoint(x: base.x - baseWidth, y: base.y))
+        trunk.addCurve(
+            to: CGPoint(x: top.x - topWidth, y: top.y),
+            control1: CGPoint(x: size.width * 0.40, y: size.height * 0.68),
+            control2: CGPoint(x: size.width * 0.55, y: size.height * 0.59)
+        )
+        trunk.addLine(to: CGPoint(x: top.x + topWidth, y: top.y))
+        trunk.addCurve(
+            to: CGPoint(x: base.x + baseWidth, y: base.y),
+            control1: CGPoint(x: size.width * 0.60, y: size.height * 0.58),
+            control2: CGPoint(x: size.width * 0.55, y: size.height * 0.69)
+        )
+        trunk.closeSubpath()
+        context.fill(
+            trunk,
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color(red: 0.24, green: 0.15, blue: 0.08),
+                    Color(red: 0.55, green: 0.34, blue: 0.17),
+                    Color(red: 0.33, green: 0.20, blue: 0.11)
+                ]),
+                startPoint: CGPoint(x: base.x - baseWidth, y: base.y),
+                endPoint: CGPoint(x: base.x + baseWidth, y: top.y)
+            )
+        )
+
+        drawBarkHighlight(from: base, to: top, in: size, context: &context)
+
+        let branches = branchSpecs(for: clampedStage, base: base, top: top, size: size)
+        for branch in branches {
+            drawBranch(branch, side: side, context: &context)
+        }
+
+        for branch in branches {
+            drawLeafCluster(at: branch.end, branchIndex: branch.seed, side: side, context: &context)
+        }
+
+        drawLeafCluster(at: CGPoint(x: top.x, y: top.y - side * 0.035), branchIndex: 99, side: side, context: &context)
+    }
+
+    private func drawBarkHighlight(from base: CGPoint, to top: CGPoint, in size: CGSize, context: inout GraphicsContext) {
+        var highlight = Path()
+        highlight.move(to: CGPoint(x: base.x - size.width * 0.006, y: base.y - size.height * 0.02))
+        highlight.addCurve(
+            to: CGPoint(x: top.x - size.width * 0.004, y: top.y + size.height * 0.03),
+            control1: CGPoint(x: size.width * 0.46, y: size.height * 0.68),
+            control2: CGPoint(x: size.width * 0.52, y: size.height * 0.58)
+        )
+        context.stroke(
+            highlight,
+            with: .color(Color(red: 0.82, green: 0.58, blue: 0.32).opacity(0.34)),
+            style: StrokeStyle(lineWidth: min(size.width, size.height) * 0.006, lineCap: .round)
+        )
+    }
+
+    private struct BranchSpec {
+        let start: CGPoint
+        let control: CGPoint
+        let end: CGPoint
+        let width: CGFloat
+        let seed: Int
+    }
+
+    private func branchSpecs(for stage: Int, base: CGPoint, top: CGPoint, size: CGSize) -> [BranchSpec] {
+        let side = min(size.width, size.height)
+        let rawSpecs: [BranchSpec] = [
+            BranchSpec(
+                start: CGPoint(x: base.x - side * 0.005, y: base.y - side * 0.18),
+                control: CGPoint(x: size.width * 0.33, y: size.height * 0.58),
+                end: CGPoint(x: size.width * 0.29, y: size.height * 0.50),
+                width: side * 0.018,
+                seed: 1
+            ),
+            BranchSpec(
+                start: CGPoint(x: base.x + side * 0.006, y: base.y - side * 0.25),
+                control: CGPoint(x: size.width * 0.68, y: size.height * 0.52),
+                end: CGPoint(x: size.width * 0.72, y: size.height * 0.44),
+                width: side * 0.017,
+                seed: 2
+            ),
+            BranchSpec(
+                start: CGPoint(x: top.x - side * 0.004, y: top.y + side * 0.08),
+                control: CGPoint(x: size.width * 0.38, y: size.height * 0.40),
+                end: CGPoint(x: size.width * 0.35, y: size.height * 0.33),
+                width: side * 0.014,
+                seed: 3
+            ),
+            BranchSpec(
+                start: CGPoint(x: top.x + side * 0.004, y: top.y + side * 0.04),
+                control: CGPoint(x: size.width * 0.63, y: size.height * 0.37),
+                end: CGPoint(x: size.width * 0.64, y: size.height * 0.29),
+                width: side * 0.013,
+                seed: 4
+            ),
+            BranchSpec(
+                start: CGPoint(x: top.x, y: top.y + side * 0.02),
+                control: CGPoint(x: size.width * 0.50, y: size.height * 0.28),
+                end: CGPoint(x: size.width * 0.48, y: size.height * 0.21),
+                width: side * 0.012,
+                seed: 5
+            )
+        ]
+
+        let count = min(rawSpecs.count, max(2, stage - 1))
+        return Array(rawSpecs.prefix(count))
+    }
+
+    private func drawBranch(_ branch: BranchSpec, side: CGFloat, context: inout GraphicsContext) {
+        var path = Path()
+        path.move(to: branch.start)
+        path.addQuadCurve(to: branch.end, control: branch.control)
+        context.stroke(
+            path,
+            with: .linearGradient(
+                Gradient(colors: [
+                    Color(red: 0.27, green: 0.17, blue: 0.09),
+                    Color(red: 0.54, green: 0.34, blue: 0.17)
+                ]),
+                startPoint: branch.start,
+                endPoint: branch.end
+            ),
+            style: StrokeStyle(lineWidth: branch.width, lineCap: .round, lineJoin: .round)
+        )
+    }
+
+    private func drawLeafCluster(at center: CGPoint, branchIndex: Int, side: CGFloat, context: inout GraphicsContext) {
+        let leafTotal = min(8, max(3, clampedStage))
+        for index in 0..<leafTotal {
+            let angle = Double((index * 47 + branchIndex * 19) % 130) - 65
+            let radius = side * CGFloat(0.018 + 0.012 * Double(index % 3))
+            let offsetX = cos(CGFloat(angle) * .pi / 180) * radius
+            let offsetY = sin(CGFloat(angle) * .pi / 180) * radius * 0.65
+            let leafCenter = CGPoint(x: center.x + offsetX, y: center.y + offsetY)
+            let leafSize = CGSize(
+                width: side * CGFloat(0.105 + 0.012 * Double((index + branchIndex) % 3)),
+                height: side * CGFloat(0.052 + 0.006 * Double(index % 2))
+            )
+            let palette = leafPalette(index + branchIndex)
+            drawLeaf(
+                center: leafCenter,
+                size: leafSize,
+                angle: angle,
+                baseColor: palette.base,
+                highlightColor: palette.highlight,
+                context: &context
+            )
         }
     }
 
-    private var leafCount: Int {
-        min(max(stageIndex + 1, 2), 12)
-    }
-
-    private func leafSize(for index: Int) -> CGSize {
-        let size = CGFloat(40 + min(stageIndex, 7) * 4 - index % 3 * 4)
-        return CGSize(width: size, height: size * 0.66)
-    }
-
-    private func leafOffset(for index: Int) -> CGPoint {
-        let side: CGFloat = index.isMultiple(of: 2) ? -1 : 1
-        let row = CGFloat(index / 2)
-        let x = side * CGFloat(28 + (index % 3) * 10)
-        let y = CGFloat(56 - Int(row) * (14 + min(stageIndex, 5)))
-        return CGPoint(x: x, y: y)
-    }
-
-    private func leafColor(for index: Int) -> Color {
-        let greens = [
-            Color(red: 0.25, green: 0.68, blue: 0.30),
-            Color(red: 0.36, green: 0.78, blue: 0.36),
-            Color(red: 0.18, green: 0.55, blue: 0.27)
+    private func leafPalette(_ index: Int) -> (base: Color, highlight: Color) {
+        let palettes = [
+            (Color(red: 0.18, green: 0.52, blue: 0.22), Color(red: 0.76, green: 0.92, blue: 0.45)),
+            (Color(red: 0.26, green: 0.66, blue: 0.28), Color(red: 0.83, green: 0.96, blue: 0.54)),
+            (Color(red: 0.13, green: 0.43, blue: 0.24), Color(red: 0.66, green: 0.86, blue: 0.42))
         ]
-        return greens[index % greens.count]
+        return palettes[index % palettes.count]
+    }
+
+    private func drawLeaf(
+        center: CGPoint,
+        size: CGSize,
+        angle: Double,
+        baseColor: Color,
+        highlightColor: Color,
+        context: inout GraphicsContext
+    ) {
+        var leafContext = context
+        leafContext.translateBy(x: center.x, y: center.y)
+        leafContext.rotate(by: .degrees(angle))
+
+        let rect = CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height)
+        let leafPath = Path(ellipseIn: rect)
+        leafContext.fill(
+            leafPath,
+            with: .linearGradient(
+                Gradient(colors: [highlightColor, baseColor]),
+                startPoint: CGPoint(x: rect.minX, y: rect.minY),
+                endPoint: CGPoint(x: rect.maxX, y: rect.maxY)
+            )
+        )
+        leafContext.stroke(
+            leafPath,
+            with: .color(Color.white.opacity(0.18)),
+            lineWidth: 0.7
+        )
+
+        var vein = Path()
+        vein.move(to: CGPoint(x: rect.minX + size.width * 0.16, y: 0))
+        vein.addLine(to: CGPoint(x: rect.maxX - size.width * 0.16, y: 0))
+        leafContext.stroke(
+            vein,
+            with: .color(Color.white.opacity(0.22)),
+            style: StrokeStyle(lineWidth: 0.7, lineCap: .round)
+        )
     }
 }
 
@@ -2607,7 +2500,7 @@ private struct MoreColorsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 16) {
+                LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(Array.extendedBehaviorPalette) { item in
                         Button {
                             selectedHex = item.hex
@@ -2789,7 +2682,7 @@ private struct BehaviorMonthDetailView: View {
                     }
 
                     ForEach(0..<leadingEmptyDays, id: \.self) { _ in
-                        Color.clear.frame(height: 72)
+                        Color.clear.frame(height: 58)
                     }
 
                     ForEach(viewModel.daySummaries) { summary in
@@ -2904,7 +2797,7 @@ private struct MonthCardView: View {
     let summary: MonthSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("\(summary.month)月")
                 .font(.title3.weight(.bold))
                 .foregroundStyle(.primary)
@@ -2912,15 +2805,15 @@ private struct MonthCardView: View {
             Spacer()
 
             Text("\(summary.count)")
-                .font(.system(size: 30, weight: .heavy))
+                .font(.system(size: 28, weight: .heavy))
                 .foregroundStyle(behavior.tintColor)
 
             Text("本月累计")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
-        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color.gray.opacity(0.10))
@@ -2938,11 +2831,11 @@ private struct DayCellView: View {
     let isToday: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             Text("\(summary.day)")
                 .font(.headline)
                 .foregroundStyle(isToday ? Color.white : Color.primary)
-                .frame(width: 30, height: 30)
+                .frame(width: 28, height: 28)
                 .background(isToday ? behavior.tintColor : Color.clear)
                 .clipShape(Circle())
 
@@ -2954,10 +2847,10 @@ private struct DayCellView: View {
 
             Capsule()
                 .fill(summary.count == 0 ? Color.gray.opacity(0.12) : behavior.tintColor.opacity(0.8))
-                .frame(height: 5)
+                .frame(height: 4)
         }
-        .padding(8)
-        .frame(maxWidth: .infinity, minHeight: 74, alignment: .topLeading)
+        .padding(6)
+        .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading)
         .background(Color.gray.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }

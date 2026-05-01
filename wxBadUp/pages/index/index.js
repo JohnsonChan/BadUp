@@ -51,7 +51,7 @@ Page({
     })
 
     // 启动流程与 iOS 一致：
-    // 1. 闪屏至少展示 1.5 秒
+    // 1. 闪屏至少展示 1 秒
     // 2. 登录完成且拿到 user 后才进入首页
     this.startLaunchFlow()
   },
@@ -90,7 +90,7 @@ Page({
       this.setData({ didShowMinimumSplash: true }, () => {
         this.syncSplashVisibility()
       })
-    }, 1500)
+    }, 1000)
 
     this.loginAndLoad()
   },

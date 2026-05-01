@@ -1,6 +1,7 @@
 const api = require('../../utils/api')
 
 const app = getApp()
+const contactText = 'BooTry'
 
 Page({
   data: {
@@ -50,6 +51,19 @@ Page({
 
     wx.navigateTo({
       url: `/pages/growth-web/growth-web?index=${encodeURIComponent(index)}`,
+    })
+  },
+
+  // 点击“联系我们”时复制联系方式，减少用户手动选择文本的成本。
+  copyContactInfo() {
+    wx.setClipboardData({
+      data: contactText,
+      success: () => {
+        wx.showToast({ title: '已复制', icon: 'success' })
+      },
+      fail: () => {
+        wx.showToast({ title: '复制失败', icon: 'none' })
+      },
     })
   },
 

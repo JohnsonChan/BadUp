@@ -17,6 +17,7 @@ struct BadUpApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(session)
+                .preferredColorScheme(.light)
         }
     }
 }

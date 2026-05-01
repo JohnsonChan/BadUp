@@ -6,10 +6,6 @@
 	objectVersion = 77;
 	objects = {
 
-/* Begin PBXBuildFile section */
-		7A1B2C3D4E5F60718293A401 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1B2C3D4E5F60718293A400 /* libsqlite3.tbd */; };
-/* End PBXBuildFile section */
-
 /* Begin PBXContainerItemProxy section */
 		41FED3CE2F90C04C009BEC03 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -31,7 +27,6 @@
 		41FED3C02F90C04B009BEC03 /* BadUp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BadUp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		41FED3CD2F90C04C009BEC03 /* BadUpTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BadUpTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		41FED3D72F90C04C009BEC03 /* BadUpUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BadUpUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		7A1B2C3D4E5F60718293A400 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -57,7 +52,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7A1B2C3D4E5F60718293A401 /* libsqlite3.tbd in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -78,14 +72,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		41BBFD892F90E54A00397F8C /* Recovered References */ = {
-			isa = PBXGroup;
-			children = (
-				7A1B2C3D4E5F60718293A400 /* libsqlite3.tbd */,
-			);
-			name = "Recovered References";
-			sourceTree = "<group>";
-		};
 		41FED3B72F90C04B009BEC03 = {
 			isa = PBXGroup;
 			children = (
@@ -93,7 +79,6 @@
 				41FED3D02F90C04C009BEC03 /* BadUpTests */,
 				41FED3DA2F90C04C009BEC03 /* BadUpUITests */,
 				41FED3C12F90C04B009BEC03 /* Products */,
-				41BBFD892F90E54A00397F8C /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};

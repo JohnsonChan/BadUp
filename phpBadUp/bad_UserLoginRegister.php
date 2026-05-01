@@ -24,9 +24,9 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $platform = trim((string)$platform);
 
     $defaults = [
-            ['运动', '身体坏了，什么都没了', '#43C77A', 1, 10],
-            ['学习', '每天进步一点点，未来就会不一样', '#31B3C5', 1, 20],
-            ['熬夜', '看看一年熬夜多少次', '#6C7EF7', -1, 30]
+            ['运动', '身体舒展了，心情自然就顺了', '#43C77A', 1, 10],
+            ['学习', '悄悄努力，静待自己慢慢蜕变', '#31B3C5', 1, 20],
+            ['熬夜', '放下执念早睡，也是一种通透', '#6C7EF7', -1, 30]
         ];
 
     $insert = $pdo->prepare("
