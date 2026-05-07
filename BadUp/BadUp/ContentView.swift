@@ -197,6 +197,32 @@ private struct HourSummary: Identifiable {
     }
 }
 
+private struct BehaviorRecordItem: Identifiable, Hashable {
+    let recordId: Int64
+    let recordedAt: String
+    let countNum: Int
+    let scoreValue: Int
+
+    var id: Int64 { recordId }
+
+    var timeText: String {
+        guard recordedAt.count >= 16 else {
+            return recordedAt
+        }
+        let start = recordedAt.index(recordedAt.startIndex, offsetBy: 11)
+        let end = recordedAt.index(recordedAt.startIndex, offsetBy: 16)
+        return String(recordedAt[start..<end])
+    }
+
+    var countText: String {
+        "\(max(countNum, 1))次"
+    }
+
+    var scoreText: String {
+        scoreValue > 0 ? "+\(scoreValue)分" : "\(scoreValue)分"
+    }
+}
+
 // 服务器习惯接口封装。
 // 页面层只和这个服务交互，不直接拼 PHP 接口参数。
 private final class RemoteBehaviorService {
@@ -370,6 +396,29 @@ private final class RemoteBehaviorService {
         return (0...23).map { HourSummary(hour: $0, count: counts[$0, default: 0]) }
     }
 
+    func fetchHourRecords(userId: Int, behavior: BehaviorItem, date: Date, hour: Int) async throws -> [BehaviorRecordItem] {
+        let response: ServerListResponse<ServerBehaviorRecord> = try await post(
+            "bad_BehaviorRecordHourList.php",
+            payload: [
+                "userId": userId,
+                "behaviorId": Int(behavior.id),
+                "recordDate": dateFormatter.string(from: date),
+                "hourNum": hour
+            ]
+        )
+        return (response.list ?? []).map(\.recordItem)
+    }
+
+    func deleteBehaviorRecord(userId: Int, record: BehaviorRecordItem) async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_BehaviorRecordDelete.php",
+            payload: [
+                "userId": userId,
+                "recordId": Int(record.id)
+            ]
+        )
+    }
+
     func fetchUserBehaviorScore(userId: Int) async throws -> UserBehaviorScore {
         let response: ServerDataResponse<UserBehaviorScore> = try await post(
             "bad_UserBehaviorScore.php",
@@ -539,6 +588,22 @@ private struct ServerDaySummary: Decodable {
 private struct ServerHourSummary: Decodable {
     let hourNum: LossyInt
     let totalCount: LossyInt
+}
+
+private struct ServerBehaviorRecord: Decodable {
+    let recordId: LossyInt
+    let recordedAt: String
+    let countNum: LossyInt?
+    let scoreValue: LossyInt?
+
+    var recordItem: BehaviorRecordItem {
+        BehaviorRecordItem(
+            recordId: Int64(recordId.intValue),
+            recordedAt: recordedAt,
+            countNum: countNum?.intValue ?? 1,
+            scoreValue: scoreValue?.intValue ?? 0
+        )
+    }
 }
 
 @MainActor
@@ -741,6 +806,9 @@ private final class BehaviorMonthViewModel: ObservableObject {
 @MainActor
 private final class BehaviorDayViewModel: ObservableObject {
     @Published var hourSummaries: [HourSummary] = []
+    @Published var hourRecords: [BehaviorRecordItem] = []
+    @Published var isLoadingHourRecords = false
+    @Published var recordErrorMessage: String?
 
     private let behavior: BehaviorItem
     private let remoteService = RemoteBehaviorService.shared
@@ -758,6 +826,38 @@ private final class BehaviorDayViewModel: ObservableObject {
             hourSummaries = try await remoteService.fetchHourSummaries(behavior: behavior, date: date)
         } catch {
             hourSummaries = (0...23).map { HourSummary(hour: $0, count: 0) }
+        }
+    }
+
+    func loadHourRecords(userId: Int, date: Date, hour: Int) async {
+        isLoadingHourRecords = true
+        hourRecords = []
+        defer { isLoadingHourRecords = false }
+
+        do {
+            hourRecords = try await remoteService.fetchHourRecords(
+                userId: userId,
+                behavior: behavior,
+                date: date,
+                hour: hour
+            )
+            recordErrorMessage = nil
+        } catch {
+            hourRecords = []
+            recordErrorMessage = "记录明细加载失败：\(error.localizedDescription)"
+        }
+    }
+
+    func deleteRecord(_ record: BehaviorRecordItem, userId: Int, date: Date, hour: Int) async -> Bool {
+        do {
+            try await remoteService.deleteBehaviorRecord(userId: userId, record: record)
+            await load(date: date)
+            await loadHourRecords(userId: userId, date: date, hour: hour)
+            recordErrorMessage = nil
+            return true
+        } catch {
+            recordErrorMessage = "删除失败：\(error.localizedDescription)"
+            return false
         }
     }
 }
@@ -2592,10 +2692,14 @@ private struct MoreColorsView: View {
 }
 
 private struct BehaviorYearDetailView: View {
+    @EnvironmentObject private var session: SessionStore
+
     let behavior: BehaviorItem
 
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
     @StateObject private var viewModel: BehaviorYearViewModel
+    @State private var hasCompletedInitialLoad = false
+    @State private var handledRecordChangeToken = 0
 
     init(behavior: BehaviorItem) {
         self.behavior = behavior
@@ -2666,17 +2770,45 @@ private struct BehaviorYearDetailView: View {
         .navigationTitle(behavior.name)
         .navigationBarTitleDisplayMode(.inline)
         .task(id: selectedYear) {
+            handledRecordChangeToken = session.behaviorRecordStatsChange?.token ?? handledRecordChangeToken
+            await viewModel.load(year: selectedYear)
+            hasCompletedInitialLoad = true
+        }
+        .onAppear {
+            reloadIfRecordStatsChanged(session.behaviorRecordStatsChange)
+        }
+        .onReceive(session.$behaviorRecordStatsChange) { change in
+            reloadIfRecordStatsChanged(change)
+        }
+    }
+
+    private func reloadIfRecordStatsChanged(_ change: BehaviorRecordStatsChange?) {
+        guard hasCompletedInitialLoad, let change, change.token != handledRecordChangeToken else {
+            return
+        }
+
+        handledRecordChangeToken = change.token
+
+        guard change.behaviorId == behavior.id, change.year == selectedYear else {
+            return
+        }
+
+        Task {
             await viewModel.load(year: selectedYear)
         }
     }
 }
 
 private struct BehaviorMonthDetailView: View {
+    @EnvironmentObject private var session: SessionStore
+
     let behavior: BehaviorItem
     let year: Int
     let month: Int
 
     @StateObject private var viewModel: BehaviorMonthViewModel
+    @State private var hasCompletedInitialLoad = false
+    @State private var handledRecordChangeToken = 0
 
     private let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -2749,16 +2881,43 @@ private struct BehaviorMonthDetailView: View {
         .navigationTitle("\(year)年\(month)月")
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            handledRecordChangeToken = session.behaviorRecordStatsChange?.token ?? handledRecordChangeToken
+            await viewModel.load(year: year, month: month)
+            hasCompletedInitialLoad = true
+        }
+        .onAppear {
+            reloadIfRecordStatsChanged(session.behaviorRecordStatsChange)
+        }
+        .onReceive(session.$behaviorRecordStatsChange) { change in
+            reloadIfRecordStatsChanged(change)
+        }
+    }
+
+    private func reloadIfRecordStatsChanged(_ change: BehaviorRecordStatsChange?) {
+        guard hasCompletedInitialLoad, let change, change.token != handledRecordChangeToken else {
+            return
+        }
+
+        handledRecordChangeToken = change.token
+
+        guard change.behaviorId == behavior.id, change.year == year, change.month == month else {
+            return
+        }
+
+        Task {
             await viewModel.load(year: year, month: month)
         }
     }
 }
 
 private struct BehaviorDayDetailView: View {
+    @EnvironmentObject private var session: SessionStore
+
     let behavior: BehaviorItem
     let date: Date
 
     @StateObject private var viewModel: BehaviorDayViewModel
+    @State private var selectedHour: HourSummary?
 
     private let calendar: Calendar = {
         var calendar = Calendar(identifier: .gregorian)
@@ -2820,7 +2979,20 @@ private struct BehaviorDayDetailView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(viewModel.hourSummaries) { summary in
-                        HourRowView(behavior: behavior, summary: summary)
+                        if summary.count > 0 {
+                            Button {
+                                openHourRecords(summary)
+                            } label: {
+                                HourRowView(
+                                    behavior: behavior,
+                                    summary: summary,
+                                    showsDisclosure: true
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            HourRowView(behavior: behavior, summary: summary)
+                        }
                     }
                 }
                 .background(Color.gray.opacity(0.08))
@@ -2833,6 +3005,74 @@ private struct BehaviorDayDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await viewModel.load(date: date)
+        }
+        .sheet(item: $selectedHour) { summary in
+            HourRecordsSheet(
+                behavior: behavior,
+                summary: summary,
+                records: viewModel.hourRecords,
+                isLoading: viewModel.isLoadingHourRecords,
+                onClose: {
+                    selectedHour = nil
+                },
+                onDelete: { record in
+                    deleteRecord(record)
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .alert(
+            "操作失败",
+            isPresented: Binding(
+                get: { viewModel.recordErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.recordErrorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text(viewModel.recordErrorMessage ?? "")
+        }
+    }
+
+    private func openHourRecords(_ summary: HourSummary) {
+        guard let userId = session.user?.userId else {
+            viewModel.recordErrorMessage = "用户信息异常，请重新打开 App"
+            return
+        }
+
+        selectedHour = summary
+        Task {
+            await viewModel.loadHourRecords(userId: userId, date: date, hour: summary.hour)
+        }
+    }
+
+    private func deleteRecord(_ record: BehaviorRecordItem) {
+        guard let userId = session.user?.userId else {
+            viewModel.recordErrorMessage = "用户信息异常，请重新打开 App"
+            return
+        }
+        guard let hour = selectedHour?.hour else {
+            return
+        }
+
+        Task {
+            let didDelete = await viewModel.deleteRecord(
+                record,
+                userId: userId,
+                date: date,
+                hour: hour
+            )
+            if didDelete {
+                session.markBehaviorRecordStatsChanged(behaviorId: behavior.id, date: date)
+                if viewModel.hourRecords.isEmpty {
+                    selectedHour = nil
+                }
+            }
         }
     }
 }
@@ -2938,6 +3178,7 @@ private struct WeekStripItem: View {
 private struct HourRowView: View {
     let behavior: BehaviorItem
     let summary: HourSummary
+    var showsDisclosure = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -2963,6 +3204,12 @@ private struct HourRowView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if showsDisclosure {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 14)
         .frame(height: 46)
@@ -2972,6 +3219,139 @@ private struct HourRowView: View {
                 .fill(Color.gray.opacity(0.10))
                 .frame(height: 1)
         }
+    }
+}
+
+private struct HourRecordsSheet: View {
+    let behavior: BehaviorItem
+    let summary: HourSummary
+    let records: [BehaviorRecordItem]
+    let isLoading: Bool
+    let onClose: () -> Void
+    let onDelete: (BehaviorRecordItem) -> Void
+
+    @State private var recordPendingDeletion: BehaviorRecordItem?
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if isLoading {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在加载记录…")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if records.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "tray")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
+                        Text("这个小时暂无记录")
+                            .font(.headline)
+                        Text("可能已经被删除或数据已刷新。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List {
+                        Section {
+                            ForEach(records) { record in
+                                HourRecordRow(
+                                    behavior: behavior,
+                                    record: record,
+                                    onDelete: {
+                                        recordPendingDeletion = record
+                                    }
+                                )
+                            }
+                        } footer: {
+                            Text("只删除单条记录，不会删除习惯项。")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("\(summary.hourText) 的记录")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("关闭") {
+                        onClose()
+                    }
+                }
+            }
+        }
+        .alert(
+            "删除这条记录？",
+            isPresented: Binding(
+                get: { recordPendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        recordPendingDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button("取消", role: .cancel) {
+                recordPendingDeletion = nil
+            }
+            Button("删除", role: .destructive) {
+                guard let record = recordPendingDeletion else {
+                    return
+                }
+                recordPendingDeletion = nil
+                onDelete(record)
+            }
+        } message: {
+            if let record = recordPendingDeletion {
+                Text("将删除 \(record.timeText) 的这一次记录，不会删除习惯项。")
+            } else {
+                Text("只删除这一次记录，不会删除习惯项。")
+            }
+        }
+    }
+}
+
+private struct HourRecordRow: View {
+    let behavior: BehaviorItem
+    let record: BehaviorRecordItem
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(behavior.tintColor)
+                .frame(width: 10, height: 10)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.timeText)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Text("\(behavior.name) · \(record.countText) · \(record.scoreText)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+
+            Spacer()
+
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Text("删除")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.red.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 6)
     }
 }
 

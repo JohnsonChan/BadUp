@@ -2,6 +2,7 @@
 // iOS App 和小程序共用同一套 PHP 接口，方便后续维护数据一致性。
 
 const baseURL = 'http://shouzhuan007.com/phpBadUp/'
+const appVersion = '1.0.2'
 
 // 统一的 POST 请求入口：
 // 1. 发起请求
@@ -51,6 +52,12 @@ function formatApiMessage(message) {
   ) {
     return '这个习惯名称已经存在，请换一个名称'
   }
+  if (text.indexOf('RecordNotFound') !== -1) {
+    return '这条记录不存在或已被删除'
+  }
+  if (text.indexOf('PermissionDenied') !== -1) {
+    return '没有权限操作这条记录'
+  }
   return text
 }
 
@@ -74,7 +81,7 @@ function loginOrRegister() {
   return request('bad_UserLoginRegister.php', {
     deviceId: getDeviceId(),
     platform: 'WeChatMiniProgram',
-    appVersion: '1.0.0',
+    appVersion,
     systemVersion: system.system || '',
   }).then((res) => res.data)
 }
@@ -148,6 +155,21 @@ function fetchDayStats(behaviorId, recordDate) {
     .then((res) => res.list || [])
 }
 
+// 拉取某一天某个小时内的单条记录，用于删除其中一条。
+function fetchHourRecords(userId, behaviorId, recordDate, hourNum) {
+  return request('bad_BehaviorRecordHourList.php', {
+    userId,
+    behaviorId,
+    recordDate,
+    hourNum,
+  }).then((res) => res.list || [])
+}
+
+// 删除单条习惯记录，不删除习惯项本身。
+function deleteBehaviorRecord(userId, recordId) {
+  return request('bad_BehaviorRecordDelete.php', { userId, recordId })
+}
+
 // 拉取用户累计习惯分。
 function fetchUserBehaviorScore(userId) {
   return request('bad_UserBehaviorScore.php', { userId })
@@ -156,6 +178,7 @@ function fetchUserBehaviorScore(userId) {
 
 module.exports = {
   baseURL,
+  appVersion,
   loginOrRegister,
   fetchTodayCounts,
   addBehavior,
@@ -166,5 +189,7 @@ module.exports = {
   fetchYearStats,
   fetchMonthStats,
   fetchDayStats,
+  fetchHourRecords,
+  deleteBehaviorRecord,
   fetchUserBehaviorScore,
 }

@@ -1,5 +1,6 @@
 const api = require('../../utils/api')
 const dateUtil = require('../../utils/date')
+const app = getApp()
 
 Page({
   data: {
@@ -26,7 +27,12 @@ Page({
       colorHex: decodeURIComponent(options.color || '#F55F52'),
     }
     this.setData({ behavior, year, month })
+    this.handledRecordChangeToken = (app.globalData.recordStatsChange || {}).token || 0
     this.load()
+  },
+
+  onShow() {
+    this.reloadIfRecordStatsChanged()
   },
 
   // 构造月视图需要的完整日历数据。
@@ -71,6 +77,27 @@ Page({
       .catch((error) => {
         wx.showToast({ title: error.message || '加载失败', icon: 'none' })
       })
+  },
+
+  // 从日详情页返回时，只有发生过删除且范围匹配才刷新本月数据。
+  reloadIfRecordStatsChanged() {
+    const change = app.globalData.recordStatsChange || {}
+    const token = Number(change.token || 0)
+    if (!token || token === this.handledRecordChangeToken) {
+      return
+    }
+
+    const { behavior, year, month } = this.data
+    this.handledRecordChangeToken = token
+
+    if (
+      behavior &&
+      Number(change.behaviorId) === Number(behavior.behaviorId) &&
+      Number(change.year) === Number(year) &&
+      Number(change.month) === Number(month)
+    ) {
+      this.load()
+    }
   },
 
   // 月 -> 日详情。

@@ -15,13 +15,50 @@
 
       <!-- 24 小时时间轴。 -->
       <view class="hour-list">
-        <view wx:for="{{hours}}" wx:key="hour" class="hour-row">
+        <view
+          wx:for="{{hours}}"
+          wx:key="hour"
+          class="hour-row {{item.clickable ? 'clickable-hour' : ''}}"
+          data-hour="{{item.hour}}"
+          data-count="{{item.count}}"
+          bindtap="openHourRecords"
+          hover-class="{{item.clickable ? 'hour-row-hover' : 'none'}}"
+        >
           <view class="hour-text">{{item.hourText}}</view>
           <view class="hour-line"></view>
           <view wx:if="{{item.count > 0}}" class="hour-count" style="background: {{behavior.colorHex}};">{{item.count}}次</view>
           <view wx:else class="no-count">无记录</view>
+          <view wx:if="{{item.count > 0}}" class="hour-arrow">›</view>
         </view>
       </view>
     </view>
   </scroll-view>
+
+  <!-- 小时记录明细底部弹层：展示单条记录，支持删除其中一条。 -->
+  <view wx:if="{{isRecordSheetVisible}}" class="record-sheet-layer">
+    <view class="record-sheet-mask" bindtap="closeRecordSheet"></view>
+    <view class="record-sheet">
+      <view class="sheet-handle"></view>
+      <view class="sheet-header">
+        <view>
+          <view class="sheet-title">{{selectedHourText}} 的记录</view>
+          <view class="sheet-subtitle">只删除单条记录，不会删除习惯项</view>
+        </view>
+        <view class="sheet-close" bindtap="closeRecordSheet">×</view>
+      </view>
+
+      <view wx:if="{{isRecordLoading}}" class="sheet-loading">加载中...</view>
+      <view wx:elif="{{hourRecords.length === 0}}" class="sheet-empty">这个小时暂无记录</view>
+      <view wx:else class="record-list">
+        <view wx:for="{{hourRecords}}" wx:key="recordId" class="record-row">
+          <view class="record-dot" style="background: {{behavior.colorHex}};"></view>
+          <view class="record-main">
+            <view class="record-time">{{item.timeText}}</view>
+            <view class="record-meta">{{behavior.behaviorName}} · {{item.countText}} · {{item.scoreText}}</view>
+          </view>
+          <view class="record-delete" data-id="{{item.recordId}}" bindtap="confirmDeleteRecord">删除</view>
+        </view>
+      </view>
+    </view>
+  </view>
 </view>

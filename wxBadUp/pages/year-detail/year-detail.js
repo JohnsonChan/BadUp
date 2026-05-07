@@ -1,4 +1,5 @@
 const api = require('../../utils/api')
+const app = getApp()
 
 Page({
   data: {
@@ -18,7 +19,12 @@ Page({
       colorHex: decodeURIComponent(options.color || '#F55F52'),
     }
     this.setData({ behavior })
+    this.handledRecordChangeToken = (app.globalData.recordStatsChange || {}).token || 0
     this.load()
+  },
+
+  onShow() {
+    this.reloadIfRecordStatsChanged()
   },
 
   // 切换年份后重新拉取该年的汇总。
@@ -52,6 +58,26 @@ Page({
       .catch((error) => {
         wx.showToast({ title: error.message || '加载失败', icon: 'none' })
       })
+  },
+
+  // 从下级页面返回时，只有发生过删除且属于当前习惯/年份才刷新。
+  reloadIfRecordStatsChanged() {
+    const change = app.globalData.recordStatsChange || {}
+    const token = Number(change.token || 0)
+    if (!token || token === this.handledRecordChangeToken) {
+      return
+    }
+
+    const { behavior, year } = this.data
+    this.handledRecordChangeToken = token
+
+    if (
+      behavior &&
+      Number(change.behaviorId) === Number(behavior.behaviorId) &&
+      Number(change.year) === Number(year)
+    ) {
+      this.load()
+    }
   },
 
   // 年 -> 月详情。
