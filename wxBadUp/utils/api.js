@@ -204,6 +204,51 @@ function fetchUserBehaviorScore(userId) {
     .then((res) => res.data || { behaviorScore: 0, totalCount: 0 })
 }
 
+// 保存用户主动确认后的微信昵称和头像地址。
+function updateUserProfile(userId, userName, avatar) {
+  return request('bad_UserProfileUpdate.php', {
+    userId,
+    userName,
+    avatar,
+  }).then((res) => res.data)
+}
+
+// 上传用户通过 chooseAvatar 选择的头像临时文件，换成服务端可长期访问的地址。
+function uploadAvatar(userId, avatarPath) {
+  return new Promise((resolve, reject) => {
+    wx.uploadFile({
+      url: baseURL + 'bad_UserAvatarUpload.php',
+      filePath: avatarPath,
+      name: 'avatar',
+      formData: { userId },
+      success(res) {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`HTTP ${res.statusCode}`))
+          return
+        }
+
+        let body = null
+        try {
+          body = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
+        } catch (error) {
+          reject(new Error('服务端响应异常'))
+          return
+        }
+
+        if (!body || Number(body.code) !== 200) {
+          reject(new Error(formatApiMessage((body && body.msg) || '头像上传失败')))
+          return
+        }
+
+        resolve(body.data || {})
+      },
+      fail(err) {
+        reject(new Error(err.errMsg || '头像上传失败'))
+      },
+    })
+  })
+}
+
 function fetchCareList(userId) {
   return request('bad_CareList.php', { userId })
 }
@@ -245,6 +290,8 @@ module.exports = {
   fetchHourRecords,
   deleteBehaviorRecord,
   fetchUserBehaviorScore,
+  updateUserProfile,
+  uploadAvatar,
   fetchCareList,
   requestCare,
   respondCare,

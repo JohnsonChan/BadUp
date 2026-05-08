@@ -5,6 +5,17 @@
     <!-- 当前登录用户的服务端信息。 -->
     <view class="section-title">种子信息</view>
     <view class="card">
+      <view class="profile-head">
+        <image wx:if="{{hasAvatar}}" class="profile-avatar" src="{{user.avatar}}" mode="aspectFill"></image>
+        <view wx:else class="profile-avatar profile-avatar-placeholder">
+          <view class="avatar-leaf avatar-leaf-a"></view>
+          <view class="avatar-leaf avatar-leaf-b"></view>
+        </view>
+        <view class="profile-info">
+          <view class="profile-name">{{displayName}}</view>
+          <view class="profile-subtitle">种子编号 {{user.userId || '-'}}</view>
+        </view>
+      </view>
       <view class="row"><text>种子编号</text><text>{{user.userId || '-'}}</text></view>
       <view class="row clickable-row" bindtap="openCarePage" hover-class="row-hover"><text>呵护关系</text><text>管理关系</text></view>
       <view class="row clickable-row" bindtap="openGrowthIndexPage" hover-class="row-hover"><text>生长指数</text><text class="score-value {{behaviorScoreClass}}">{{behaviorScore}}</text></view>

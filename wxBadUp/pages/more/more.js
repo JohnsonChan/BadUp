@@ -7,6 +7,8 @@ const beianURL = 'https://beian.miit.gov.cn/'
 Page({
   data: {
     user: null,
+    displayName: '未设置昵称',
+    hasAvatar: false,
     registerDate: '-',
     platformName: '-',
     behaviorScore: '-',
@@ -19,6 +21,8 @@ Page({
     // 这里优先读全局内存，其次读本地缓存，避免页面刷新后信息丢失。
     this.setData({
       user,
+      displayName: this.formatDisplayName(user),
+      hasAvatar: !!(user && user.avatar),
       registerDate: user && user.createdAt ? user.createdAt : '-',
       platformName: this.formatPlatformName(user && user.platform),
       behaviorScore: '-',
@@ -28,6 +32,16 @@ Page({
     if (user && user.userId) {
       this.loadBehaviorScore(user.userId)
     }
+  },
+
+  formatDisplayName(user) {
+    if (user && user.userName) {
+      return user.userName
+    }
+    if (user && user.userId) {
+      return `种子${user.userId}`
+    }
+    return '未设置昵称'
   },
 
   loadBehaviorScore(userId) {

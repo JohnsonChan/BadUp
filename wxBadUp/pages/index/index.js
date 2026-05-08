@@ -38,6 +38,11 @@ Page({
     pendingRecord: null,
     pendingAction: null,
     pendingDelete: null,
+    showProfilePrompt: false,
+    profileSubmitting: false,
+    profileNickName: '',
+    profileAvatarPreview: '',
+    profileAvatarTempPath: '',
 
     // 长按后会顺带触发 tap，这个字段用于屏蔽那一次误触。
     skipNextTapBehaviorId: null,
@@ -142,6 +147,7 @@ Page({
           didFinishLaunchLogin: true,
         }, () => {
           this.syncSplashVisibility()
+          this.maybeShowProfilePrompt(user)
         })
         return this.loadToday()
       })
@@ -161,6 +167,108 @@ Page({
   // 重试登录时，重置为与首次启动相同的闪屏逻辑。
   retryLogin() {
     this.startLaunchFlow()
+  },
+
+  // 首次登录后，如果服务端还没有昵称和头像，就提示用户主动确认获取微信资料。
+  maybeShowProfilePrompt(user) {
+    if (this.data.isSubjectMode || !user || !user.userId) {
+      return
+    }
+
+    if (user.userName && user.avatar) {
+      return
+    }
+
+    const promptedKey = `badup.profile.prompted.${user.userId}`
+    if (wx.getStorageSync(promptedKey)) {
+      return
+    }
+
+    this.setData({
+      showProfilePrompt: true,
+      profileNickName: user.userName || '',
+      profileAvatarPreview: user.avatar || '',
+      profileAvatarTempPath: '',
+    })
+  },
+
+  closeProfilePrompt() {
+    const user = this.data.user
+    if (user && user.userId) {
+      wx.setStorageSync(`badup.profile.prompted.${user.userId}`, true)
+    }
+    this.setData({
+      showProfilePrompt: false,
+      profileSubmitting: false,
+      profileNickName: '',
+      profileAvatarPreview: '',
+      profileAvatarTempPath: '',
+    })
+  },
+
+  onChooseProfileAvatar(event) {
+    const avatarUrl = event.detail && event.detail.avatarUrl
+    if (!avatarUrl) {
+      return
+    }
+    this.setData({
+      profileAvatarPreview: avatarUrl,
+      profileAvatarTempPath: avatarUrl,
+    })
+  },
+
+  onProfileNicknameInput(event) {
+    this.setData({
+      profileNickName: (event.detail && event.detail.value) || '',
+    })
+  },
+
+  saveWechatProfile() {
+    const user = this.data.user
+    if (!user || !user.userId || this.data.profileSubmitting) {
+      return
+    }
+
+    const userName = String(this.data.profileNickName || '').trim()
+    if (!userName) {
+      wx.showToast({ title: '请填写微信昵称', icon: 'none' })
+      return
+    }
+
+    if (!this.data.profileAvatarPreview) {
+      wx.showToast({ title: '请选择微信头像', icon: 'none' })
+      return
+    }
+
+    this.setData({ profileSubmitting: true })
+
+    const uploadTask = this.data.profileAvatarTempPath
+      ? api.uploadAvatar(user.userId, this.data.profileAvatarTempPath).then((data) => data.avatar || '')
+      : Promise.resolve(user.avatar || '')
+
+    uploadTask
+      .then((avatar) => api.updateUserProfile(user.userId, userName, avatar))
+      .then((updatedUser) => {
+        const mergedUser = Object.assign({}, user, updatedUser || {}, {
+          userName: (updatedUser && updatedUser.userName) || userName,
+          avatar: (updatedUser && updatedUser.avatar) || this.data.profileAvatarPreview,
+        })
+        app.globalData.user = mergedUser
+        wx.setStorageSync('badup.cached.user', mergedUser)
+        wx.setStorageSync(`badup.profile.prompted.${user.userId}`, true)
+        this.setData({
+          user: mergedUser,
+          showProfilePrompt: false,
+          profileSubmitting: false,
+          profileNickName: '',
+          profileAvatarPreview: '',
+          profileAvatarTempPath: '',
+        })
+      })
+      .catch((error) => {
+        this.setData({ profileSubmitting: false })
+        wx.showToast({ title: error.message || '保存失败', icon: 'none' })
+      })
   },
 
   // 拉取首页今天的习惯和统计，并整理成页面更好用的结构。

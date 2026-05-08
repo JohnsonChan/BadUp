@@ -136,5 +136,30 @@
         </view>
       </view>
     </view>
+
+    <!-- 首次登录后的微信资料确认：微信要求头像和昵称由用户主动选择/输入。 -->
+    <view wx:if="{{showProfilePrompt}}" class="dialog-mask">
+      <view class="dialog-card profile-dialog-card">
+        <button class="profile-avatar-button" open-type="chooseAvatar" bindchooseavatar="onChooseProfileAvatar">
+          <image wx:if="{{profileAvatarPreview}}" class="profile-avatar-image" src="{{profileAvatarPreview}}" mode="aspectFill"></image>
+          <view wx:else class="profile-avatar-placeholder">
+            <view class="profile-leaf profile-leaf-a"></view>
+            <view class="profile-leaf profile-leaf-b"></view>
+          </view>
+        </button>
+        <view class="dialog-title">完善种子信息</view>
+        <view class="dialog-message profile-message">
+          <text class="dialog-line">选择微信头像和昵称，用于呵护关系里的展示。</text>
+        </view>
+        <view class="profile-form">
+          <view class="profile-field-label">微信昵称</view>
+          <input class="profile-nickname-input" type="nickname" value="{{profileNickName}}" placeholder="点击选择或输入昵称" bindinput="onProfileNicknameInput" />
+        </view>
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" bindtap="closeProfilePrompt">暂不设置</button>
+          <button class="dialog-btn main profile-confirm-btn" loading="{{profileSubmitting}}" bindtap="saveWechatProfile">保存资料</button>
+        </view>
+      </view>
+    </view>
   </block>
 </view>
