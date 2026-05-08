@@ -1,13 +1,101 @@
 <?php
 // 用户自动登录/注册接口。
-// iOS 启动页会把 Keychain 里的 deviceId 发过来；服务端按 deviceId 找用户，找不到就创建。
+// 小程序通过 wx.login code 换 openId 登录；iOS 继续通过 Keychain deviceId 登录。
 require_once "bad_Common.php";
 require_once "bad_Database.php";
 
 $data = badGetRequestData();
 
-if (empty($data['deviceId']) && empty($data['phone']) && empty($data['userCode'])) {
+if (empty($data['loginCode']) && empty($data['deviceId']) && empty($data['phone']) && empty($data['userCode'])) {
     badResponse(400, 'NoLoginKey');
+}
+
+// 读取微信配置。AppId 可以公开，AppSecret 只能放在服务端。
+function badGetWechatConfigValue($constantName, $envName, $defaultValue) {
+    if (defined($constantName)) {
+        return trim((string)constant($constantName));
+    }
+
+    $envValue = getenv($envName);
+    if ($envValue !== false && $envValue !== '') {
+        return trim((string)$envValue);
+    }
+
+    return trim((string)$defaultValue);
+}
+
+function badEnsureWechatConfigLoaded() {
+    $configPath = dirname(__FILE__) . '/bad_WechatConfig.php';
+    if (file_exists($configPath)) {
+        require_once $configPath;
+    }
+}
+
+function badHttpGet($url) {
+    if (function_exists('curl_init')) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+        $response = curl_exec($ch);
+        $errorNo = curl_errno($ch);
+        curl_close($ch);
+        if ($errorNo === 0 && $response !== false) {
+            return $response;
+        }
+    }
+
+    if (ini_get('allow_url_fopen')) {
+        return @file_get_contents($url);
+    }
+
+    return false;
+}
+
+function badGetWechatOpenId($loginCode) {
+    $loginCode = trim((string)$loginCode);
+    if ($loginCode === '') {
+        return '';
+    }
+
+    badEnsureWechatConfigLoaded();
+
+    $appId = badGetWechatConfigValue('BAD_WECHAT_APP_ID', 'BAD_WECHAT_APP_ID', 'wx2321df4ab9559638');
+    $appSecret = badGetWechatConfigValue('BAD_WECHAT_APP_SECRET', 'BAD_WECHAT_APP_SECRET', '');
+
+    if ($appId === '' || $appSecret === '') {
+        badResponse(500, 'WeChatConfigMissing');
+    }
+
+    $url = 'https://api.weixin.qq.com/sns/jscode2session'
+        . '?appid=' . rawurlencode($appId)
+        . '&secret=' . rawurlencode($appSecret)
+        . '&js_code=' . rawurlencode($loginCode)
+        . '&grant_type=authorization_code';
+
+    $responseText = badHttpGet($url);
+    if ($responseText === false || $responseText === '') {
+        badResponse(502, 'WeChatLoginRequestFailed');
+    }
+
+    $response = json_decode($responseText, true);
+    if (!is_array($response)) {
+        badResponse(502, 'WeChatLoginInvalidResponse');
+    }
+
+    if (!empty($response['errcode'])) {
+        $errorMessage = isset($response['errmsg']) ? $response['errmsg'] : '';
+        badResponse(400, 'WeChatLoginFailed: ' . $response['errcode'] . ' ' . $errorMessage);
+    }
+
+    if (empty($response['openid'])) {
+        badResponse(502, 'WeChatOpenIdMissing');
+    }
+
+    return trim((string)$response['openid']);
 }
 
 // 确保新用户有默认习惯项。
@@ -53,46 +141,68 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
 
 try {
     $pdo = Database::getPdoInstance();
+    $wechatOpenId = !empty($data['loginCode']) ? badGetWechatOpenId($data['loginCode']) : '';
+    $deviceId = !empty($data['deviceId']) ? trim($data['deviceId']) : '';
 
-    // 允许用 deviceId、phone、userCode 三种方式匹配已有用户。
-    // 当前 iOS 端只传 deviceId，其它字段预留给后续账号体系。
-    $conditions = [];
-    $params = [];
+    $user = null;
 
-    if (!empty($data['deviceId'])) {
-        $conditions[] = 'deviceId = :deviceId';
-        $params[':deviceId'] = trim($data['deviceId']);
-    }
-    if (!empty($data['phone'])) {
-        $conditions[] = 'phone = :phone';
-        $params[':phone'] = trim($data['phone']);
-    }
-    if (!empty($data['userCode'])) {
-        $conditions[] = 'userCode = :userCode';
-        $params[':userCode'] = trim($data['userCode']);
-    }
+    // 小程序优先按 openId 查找，这是删除重装后仍稳定的用户标识。
+    if ($wechatOpenId !== '') {
+        $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE openId = :openId LIMIT 1");
+        $stmt->execute([':openId' => $wechatOpenId]);
+        $user = $stmt->fetch();
+    } else {
+        // iOS 或旧接口仍允许用 deviceId、phone、userCode 登录。
+        $conditions = [];
+        $params = [];
 
-    $sql = "SELECT * FROM bad_User WHERE " . implode(' OR ', $conditions) . " LIMIT 1";
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $user = $stmt->fetch();
+        if ($deviceId !== '') {
+            $conditions[] = 'deviceId = :deviceId';
+            $params[':deviceId'] = $deviceId;
+        }
+        if (!empty($data['phone'])) {
+            $conditions[] = 'phone = :phone';
+            $params[':phone'] = trim($data['phone']);
+        }
+        if (!empty($data['userCode'])) {
+            $conditions[] = 'userCode = :userCode';
+            $params[':userCode'] = trim($data['userCode']);
+        }
+
+        if (count($conditions) > 0) {
+            $sql = "SELECT * FROM bad_User WHERE " . implode(' OR ', $conditions) . " LIMIT 1";
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($params);
+            $user = $stmt->fetch();
+        }
+    }
 
     if ($user) {
         // 老用户登录时刷新最近登录信息。
-        $update = $pdo->prepare("
-            UPDATE bad_User
-            SET ip = :ip,
-                appVersion = :appVersion,
-                systemVersion = :systemVersion,
-                updatedAt = NOW()
-            WHERE userId = :userId
-        ");
-        $update->execute([
+        $updateFields = [
+            'ip = :ip',
+            'appVersion = :appVersion',
+            'systemVersion = :systemVersion',
+            'updatedAt = NOW()'
+        ];
+        $updateParams = [
             ':ip' => badGetIp(),
             ':appVersion' => isset($data['appVersion']) ? $data['appVersion'] : null,
             ':systemVersion' => isset($data['systemVersion']) ? $data['systemVersion'] : null,
             ':userId' => $user['userId']
-        ]);
+        ];
+
+        if ($deviceId !== '' && (empty($user['deviceId']))) {
+            $updateFields[] = 'deviceId = :deviceId';
+            $updateParams[':deviceId'] = $deviceId;
+        }
+
+        $update = $pdo->prepare("
+            UPDATE bad_User
+            SET " . implode(",\n                ", $updateFields) . "
+            WHERE userId = :userId
+        ");
+        $update->execute($updateParams);
 
         $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
         $stmt->execute([':userId' => $user['userId']]);
@@ -103,9 +213,9 @@ try {
     // 没找到用户时自动注册。
     $insert = $pdo->prepare("
         INSERT INTO bad_User
-        (userCode, userName, phone, email, password, avatar, deviceId, platform, appVersion, systemVersion, ip, status, createdAt)
+        (userCode, userName, phone, email, password, avatar, openId, deviceId, platform, appVersion, systemVersion, ip, status, createdAt)
         VALUES
-        (:userCode, :userName, :phone, :email, :password, :avatar, :deviceId, :platform, :appVersion, :systemVersion, :ip, :status, :createdAt)
+        (:userCode, :userName, :phone, :email, :password, :avatar, :openId, :deviceId, :platform, :appVersion, :systemVersion, :ip, :status, :createdAt)
     ");
 
     $userCode = !empty($data['userCode']) ? trim($data['userCode']) : ('U' . date('YmdHis') . rand(100, 999));
@@ -116,7 +226,8 @@ try {
         ':email' => isset($data['email']) ? trim($data['email']) : null,
         ':password' => isset($data['password']) ? trim($data['password']) : null,
         ':avatar' => isset($data['avatar']) ? trim($data['avatar']) : null,
-        ':deviceId' => isset($data['deviceId']) ? trim($data['deviceId']) : null,
+        ':openId' => $wechatOpenId !== '' ? $wechatOpenId : null,
+        ':deviceId' => $deviceId !== '' ? $deviceId : null,
         ':platform' => isset($data['platform']) ? trim($data['platform']) : 'iOS',
         ':appVersion' => isset($data['appVersion']) ? trim($data['appVersion']) : null,
         ':systemVersion' => isset($data['systemVersion']) ? trim($data['systemVersion']) : null,

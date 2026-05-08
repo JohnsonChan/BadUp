@@ -10,6 +10,7 @@ CREATE TABLE `bad_User` (
   `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
   `password` varchar(255) DEFAULT NULL COMMENT '密码摘要，可选',
   `avatar` varchar(255) DEFAULT NULL COMMENT '头像地址',
+  `openId` varchar(64) DEFAULT NULL COMMENT '微信OpenID，微信小程序稳定用户标识',
   `deviceId` varchar(100) DEFAULT NULL COMMENT '设备唯一标识',
   `platform` varchar(20) DEFAULT NULL COMMENT '平台，例如 iOS',
   `appVersion` varchar(20) DEFAULT NULL COMMENT 'App版本号',
@@ -21,6 +22,7 @@ CREATE TABLE `bad_User` (
   PRIMARY KEY (`userId`),
   UNIQUE KEY `uniq_userCode` (`userCode`) USING BTREE,
   UNIQUE KEY `uniq_phone` (`phone`) USING BTREE,
+  UNIQUE KEY `uniq_openId` (`openId`) USING BTREE,
   KEY `idx_deviceId` (`deviceId`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=10015 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT COMMENT='用户信息表'
 ;

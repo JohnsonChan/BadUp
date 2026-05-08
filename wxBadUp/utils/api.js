@@ -58,35 +58,56 @@ function formatApiMessage(message) {
   if (text.indexOf('PermissionDenied') !== -1) {
     return '当前没有权限操作'
   }
+  if (text.indexOf('WeChatConfigMissing') !== -1) {
+    return '微信登录配置缺失，请检查服务端配置'
+  }
+  if (
+    text.indexOf('WeChatLoginFailed') !== -1 ||
+    text.indexOf('WeChatLoginRequestFailed') !== -1 ||
+    text.indexOf('WeChatLoginInvalidResponse') !== -1 ||
+    text.indexOf('WeChatOpenIdMissing') !== -1
+  ) {
+    return '微信登录失败，请稍后重试'
+  }
   if (text.indexOf('呵护申请已发送') !== -1 || text.indexOf('CareRequestPending') !== -1) {
     return '呵护申请已发送，请等待对方确认'
   }
   return text
 }
 
-// 小程序无法像原生 App 一样拿到稳定设备标识，这里退而求其次：
-// 首次运行生成一个本地 deviceId，后续从 storage 复用。
-function getDeviceId() {
-  const key = 'badup.device.id'
-  const existing = wx.getStorageSync(key)
-  if (existing) return existing
-
-  const random = Math.random().toString(16).slice(2)
-  const deviceId = `wx-${Date.now()}-${random}`
-  wx.setStorageSync(key, deviceId)
-  return deviceId
+// 小程序登录以微信 openid 为准：
+// 1. 小程序端调用 wx.login 拿一次性 code
+// 2. code 发给 PHP，PHP 请求微信接口换 openid
+// 3. 服务端按 openid 登录或注册用户
+function getWechatLoginCode() {
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success(res) {
+        if (res.code) {
+          resolve(res.code)
+          return
+        }
+        reject(new Error(res.errMsg || '微信登录失败'))
+      },
+      fail(err) {
+        reject(new Error(err.errMsg || '微信登录失败'))
+      },
+    })
+  })
 }
 
 // 启动时自动登录或注册。
-// 后端会根据 deviceId 判断是否需要创建新用户。
+// 小程序只传 loginCode，服务端只按 openid 识别微信用户。
 function loginOrRegister() {
   const system = wx.getSystemInfoSync()
-  return request('bad_UserLoginRegister.php', {
-    deviceId: getDeviceId(),
-    platform: 'WeChatMiniProgram',
-    appVersion,
-    systemVersion: system.system || '',
-  }).then((res) => res.data)
+  return getWechatLoginCode()
+    .then((loginCode) => request('bad_UserLoginRegister.php', {
+      loginCode,
+      platform: 'WeChatMiniProgram',
+      appVersion,
+      systemVersion: system.system || '',
+    }))
+    .then((res) => res.data)
 }
 
 // 拉取今天的习惯列表和对应计数。

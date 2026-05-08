@@ -34,6 +34,7 @@ Carthage/Build/
 # Local environment files
 .env
 .env.*
+phpBadUp/bad_WechatConfig.php
 BadUp/BadUp.xcodeproj/project.xcworkspace/xcuserdata/chenrs.xcuserdatad/UserInterfaceState.xcuserstate
 BadUp/BadUp.xcodeproj/project.xcworkspace/xcuserdata/chenrs.xcuserdatad/UserInterfaceState.xcuserstate
 phpYYZ/
