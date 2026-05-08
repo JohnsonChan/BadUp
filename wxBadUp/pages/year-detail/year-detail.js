@@ -8,6 +8,8 @@ Page({
     // summaries 固定为 12 项，每项对应一个月。
     summaries: [],
     totalCount: 0,
+    canManageRecords: true,
+    subjectUserId: null,
   },
 
   onLoad(options) {
@@ -18,7 +20,11 @@ Page({
       behaviorDesc: decodeURIComponent(options.desc || ''),
       colorHex: decodeURIComponent(options.color || '#F55F52'),
     }
-    this.setData({ behavior })
+    this.setData({
+      behavior,
+      subjectUserId: Number(options.subjectUserId) || null,
+      canManageRecords: String(options.canManage || '1') !== '0',
+    })
     this.handledRecordChangeToken = (app.globalData.recordStatsChange || {}).token || 0
     this.load()
   },
@@ -42,7 +48,8 @@ Page({
   load() {
     const { behavior, year } = this.data
     if (!behavior) return
-    api.fetchYearStats(behavior.behaviorId, year)
+    const user = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
+    api.fetchYearStats(behavior.behaviorId, year, user && user.userId, this.data.subjectUserId)
       .then((list) => {
         const counts = {}
         list.forEach((item) => {
@@ -85,7 +92,7 @@ Page({
     const month = Number(event.currentTarget.dataset.month)
     const { behavior, year } = this.data
     wx.navigateTo({
-      url: `/pages/month-detail/month-detail?behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&year=${year}&month=${month}`,
+      url: `/pages/month-detail/month-detail?behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&year=${year}&month=${month}&subjectUserId=${this.data.subjectUserId || ''}&canManage=${this.data.canManageRecords ? 1 : 0}`,
     })
   },
 })

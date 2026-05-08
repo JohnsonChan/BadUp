@@ -40,6 +40,7 @@ Page({
     // add: 新增习惯；edit: 编辑已有习惯。
     mode: 'add',
     behaviorId: null,
+    subjectUserId: null,
     name: '',
     desc: '',
     colorHex: '#F55F52',
@@ -56,6 +57,11 @@ Page({
   },
 
   onLoad(options) {
+    const subjectUserId = Number(options.subjectUserId)
+    if (Number.isFinite(subjectUserId) && subjectUserId > 0) {
+      this.setData({ subjectUserId })
+    }
+
     // 编辑模式下，从首页传入 query 初始化表单。
     if (options.mode === 'edit') {
       const behaviorId = Number(options.behaviorId)
@@ -143,8 +149,8 @@ Page({
 
     this.setData({ isSaving: true })
     const task = this.data.mode === 'edit'
-      ? api.updateBehavior(user.userId, this.data.behaviorId, name, desc, this.data.colorHex)
-      : api.addBehavior(user.userId, name, desc, this.data.colorHex, this.data.behaviorType)
+      ? api.updateBehavior(user.userId, this.data.behaviorId, name, desc, this.data.colorHex, this.data.subjectUserId)
+      : api.addBehavior(user.userId, name, desc, this.data.colorHex, this.data.behaviorType, this.data.subjectUserId)
 
     task.then(() => {
       wx.navigateBack()

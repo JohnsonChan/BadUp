@@ -13,31 +13,27 @@ try {
     $recordId = intval($data['recordId']);
 
     $find = $pdo->prepare("
-        SELECT recordId
+        SELECT recordId, userId, operatorUserId, subjectUserId
         FROM bad_BehaviorRecord
         WHERE recordId = :recordId
-          AND userId = :userId
         LIMIT 1
     ");
-    $find->execute([
-        ':recordId' => $recordId,
-        ':userId' => $userId
-    ]);
+    $find->execute([':recordId' => $recordId]);
+    $record = $find->fetch();
 
-    if (!$find->fetch()) {
+    if (!$record) {
         badResponse(404, 'RecordNotFound');
     }
+
+    $subjectUserId = badRecordSubjectUserId($record);
+    badRequireCanManageSubject($pdo, $userId, $subjectUserId);
 
     $delete = $pdo->prepare("
         DELETE FROM bad_BehaviorRecord
         WHERE recordId = :recordId
-          AND userId = :userId
         LIMIT 1
     ");
-    $delete->execute([
-        ':recordId' => $recordId,
-        ':userId' => $userId
-    ]);
+    $delete->execute([':recordId' => $recordId]);
 
     badResponse(200, 'DeleteSuccess');
 } catch (PDOException $e) {

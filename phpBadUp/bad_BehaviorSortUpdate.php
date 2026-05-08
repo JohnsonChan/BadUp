@@ -6,6 +6,7 @@ $data = badGetRequestData();
 badRequireFields($data, ['userId', 'behaviorIds']);
 
 $userId = intval($data['userId']);
+$subjectUserId = isset($data['subjectUserId']) && $data['subjectUserId'] !== '' ? intval($data['subjectUserId']) : $userId;
 $behaviorIds = $data['behaviorIds'];
 if (!is_array($behaviorIds)) {
     $behaviorIds = explode(',', strval($behaviorIds));
@@ -27,14 +28,15 @@ if (count($cleanIds) === 0) {
 
 try {
     $pdo = Database::getPdoInstance();
+    badRequireCanManageSubject($pdo, $userId, $subjectUserId);
     $pdo->beginTransaction();
 
-    // 只更新当前用户自己的习惯，避免用户调整系统共享习惯或其它用户的数据。
+    // 只更新当前作用用户的习惯，呵护者排序时也不会影响其它人的数据。
     $stmt = $pdo->prepare("
         UPDATE bad_Behavior
            SET sortOrder = :sortOrder
          WHERE behaviorId = :behaviorId
-           AND userId = :userId
+           AND userId = :subjectUserId
          LIMIT 1
     ");
 
@@ -43,7 +45,7 @@ try {
         $stmt->execute([
             ':sortOrder' => ($index + 1) * 10,
             ':behaviorId' => $behaviorId,
-            ':userId' => $userId
+            ':subjectUserId' => $subjectUserId
         ]);
         $updated += $stmt->rowCount();
     }

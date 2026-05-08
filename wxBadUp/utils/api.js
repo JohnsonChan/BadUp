@@ -56,7 +56,10 @@ function formatApiMessage(message) {
     return '这条记录不存在或已被删除'
   }
   if (text.indexOf('PermissionDenied') !== -1) {
-    return '没有权限操作这条记录'
+    return '当前没有权限操作'
+  }
+  if (text.indexOf('呵护申请已发送') !== -1 || text.indexOf('CareRequestPending') !== -1) {
+    return '呵护申请已发送，请等待对方确认'
   }
   return text
 }
@@ -87,15 +90,16 @@ function loginOrRegister() {
 }
 
 // 拉取今天的习惯列表和对应计数。
-function fetchTodayCounts(userId, recordDate) {
-  return request('bad_BehaviorTodayCount.php', { userId, recordDate })
+function fetchTodayCounts(userId, recordDate, subjectUserId) {
+  return request('bad_BehaviorTodayCount.php', { userId, recordDate, subjectUserId })
     .then((res) => res.list || [])
 }
 
 // 新增一个习惯项。
-function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType) {
+function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType, subjectUserId) {
   return request('bad_BehaviorInsert.php', {
     userId,
+    subjectUserId,
     behaviorName,
     behaviorDesc,
     colorHex,
@@ -104,9 +108,10 @@ function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType)
 }
 
 // 编辑已有习惯项。
-function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex) {
+function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex, subjectUserId) {
   return request('bad_BehaviorUpdate.php', {
     userId,
+    subjectUserId,
     behaviorId,
     behaviorName,
     behaviorDesc,
@@ -115,20 +120,21 @@ function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex
 }
 
 // 删除习惯项及其相关记录。
-function deleteBehavior(userId, behaviorId) {
-  return request('bad_BehaviorDelete.php', { userId, behaviorId })
+function deleteBehavior(userId, behaviorId, subjectUserId) {
+  return request('bad_BehaviorDelete.php', { userId, behaviorId, subjectUserId })
 }
 
 // 更新习惯项展示顺序。
-function updateBehaviorSort(userId, behaviorIds) {
-  return request('bad_BehaviorSortUpdate.php', { userId, behaviorIds })
+function updateBehaviorSort(userId, behaviorIds, subjectUserId) {
+  return request('bad_BehaviorSortUpdate.php', { userId, behaviorIds, subjectUserId })
 }
 
 // 追加一条习惯记录。
 // clientUid 用来给服务端做幂等或排查时的客户端标识。
-function insertRecord(userId, behaviorId, recordDate, recordedAt) {
+function insertRecord(userId, behaviorId, recordDate, recordedAt, subjectUserId) {
   return request('bad_BehaviorRecordInsert.php', {
     userId,
+    subjectUserId,
     behaviorId,
     recordDate,
     recordedAt,
@@ -138,27 +144,28 @@ function insertRecord(userId, behaviorId, recordDate, recordedAt) {
 }
 
 // 按年聚合，返回 1~12 月统计。
-function fetchYearStats(behaviorId, year) {
-  return request('bad_BehaviorYearStats.php', { behaviorId, year })
+function fetchYearStats(behaviorId, year, userId, subjectUserId) {
+  return request('bad_BehaviorYearStats.php', { behaviorId, year, userId, subjectUserId })
     .then((res) => res.list || [])
 }
 
 // 按月聚合，返回每天统计。
-function fetchMonthStats(behaviorId, year, month) {
-  return request('bad_BehaviorMonthStats.php', { behaviorId, year, month })
+function fetchMonthStats(behaviorId, year, month, userId, subjectUserId) {
+  return request('bad_BehaviorMonthStats.php', { behaviorId, year, month, userId, subjectUserId })
     .then((res) => res.list || [])
 }
 
 // 按天聚合，返回 0~23 点小时统计。
-function fetchDayStats(behaviorId, recordDate) {
-  return request('bad_BehaviorDayStats.php', { behaviorId, recordDate })
+function fetchDayStats(behaviorId, recordDate, userId, subjectUserId) {
+  return request('bad_BehaviorDayStats.php', { behaviorId, recordDate, userId, subjectUserId })
     .then((res) => res.list || [])
 }
 
 // 拉取某一天某个小时内的单条记录，用于删除其中一条。
-function fetchHourRecords(userId, behaviorId, recordDate, hourNum) {
+function fetchHourRecords(userId, behaviorId, recordDate, hourNum, subjectUserId) {
   return request('bad_BehaviorRecordHourList.php', {
     userId,
+    subjectUserId,
     behaviorId,
     recordDate,
     hourNum,
@@ -174,6 +181,31 @@ function deleteBehaviorRecord(userId, recordId) {
 function fetchUserBehaviorScore(userId) {
   return request('bad_UserBehaviorScore.php', { userId })
     .then((res) => res.data || { behaviorScore: 0, totalCount: 0 })
+}
+
+function fetchCareList(userId) {
+  return request('bad_CareList.php', { userId })
+}
+
+function requestCare(userId, careCode, permissionLevel) {
+  return request('bad_CareRequest.php', {
+    userId,
+    careCode,
+    permissionLevel,
+  })
+}
+
+function respondCare(userId, careId, action, rejectReason = '') {
+  return request('bad_CareRespond.php', { userId, careId, action, rejectReason })
+}
+
+function updateCareRemark(userId, careId, remark) {
+  return request('bad_CareRemarkUpdate.php', { userId, careId, remark })
+}
+
+// 修改已建立呵护关系的权限。服务端只允许发起方修改。
+function updateCarePermission(userId, careId, permissionLevel) {
+  return request('bad_CarePermissionUpdate.php', { userId, careId, permissionLevel })
 }
 
 module.exports = {
@@ -192,4 +224,9 @@ module.exports = {
   fetchHourRecords,
   deleteBehaviorRecord,
   fetchUserBehaviorScore,
+  fetchCareList,
+  requestCare,
+  respondCare,
+  updateCareRemark,
+  updateCarePermission,
 }

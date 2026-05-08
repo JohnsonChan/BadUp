@@ -9,10 +9,13 @@ Page({
     // 固定渲染 24 个小时段。
     hours: [],
     totalCount: 0,
+    canManageRecords: true,
+    subjectUserId: null,
 
     // 小时记录明细弹层。
     isRecordSheetVisible: false,
     isRecordLoading: false,
+    recordSheetError: '',
     selectedHour: null,
     selectedHourText: '',
     hourRecords: [],
@@ -30,6 +33,8 @@ Page({
       behavior,
       date,
       dayTitle: this.toChineseDate(date),
+      subjectUserId: Number(options.subjectUserId) || null,
+      canManageRecords: String(options.canManage || '1') !== '0',
     })
     this.load()
   },
@@ -39,7 +44,9 @@ Page({
     const { behavior, date } = this.data
     if (!behavior || !date) return
 
-    api.fetchDayStats(behavior.behaviorId, date)
+    const user = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
+    const userId = user && user.userId
+    api.fetchDayStats(behavior.behaviorId, date, userId, this.getEffectiveSubjectUserId(userId))
       .then((list) => {
         const counts = {}
         list.forEach((item) => {
@@ -62,8 +69,10 @@ Page({
 
   // 点击有记录的小时，拉取这个小时里的每一条记录并展示底部弹层。
   openHourRecords(event) {
-    const hour = Number(event.currentTarget.dataset.hour)
-    const count = Number(event.currentTarget.dataset.count)
+    const dataset = (event.currentTarget && event.currentTarget.dataset) || (event.target && event.target.dataset) || {}
+    const hour = Number(dataset.hour)
+    const hourItem = this.data.hours.find((item) => Number(item.hour) === hour)
+    const count = Number(dataset.count || (hourItem && hourItem.count) || 0)
     if (!count) return
 
     const user = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
@@ -77,32 +86,22 @@ Page({
     this.setData({
       isRecordSheetVisible: true,
       isRecordLoading: true,
+      recordSheetError: '',
       selectedHour: hour,
       selectedHourText: `${hour < 10 ? '0' : ''}${hour}:00`,
       hourRecords: [],
     })
 
-    api.fetchHourRecords(userId, behavior.behaviorId, date, hour)
+    api.fetchHourRecords(userId, behavior.behaviorId, date, hour, this.getEffectiveSubjectUserId(userId))
       .then((list) => {
-        const hourRecords = list.map((item) => {
-          const recordedAt = item.recordedAt || ''
-          const timeText = recordedAt.length >= 16 ? recordedAt.slice(11, 16) : recordedAt
-          const scoreValue = Number(item.scoreValue || 0)
-          const countNum = Number(item.countNum || 1)
-          return {
-            recordId: Number(item.recordId),
-            recordedAt,
-            timeText: timeText || this.data.selectedHourText,
-            countNum,
-            countText: countNum > 1 ? `${countNum}次` : '1次',
-            scoreText: scoreValue > 0 ? `+${scoreValue}分` : `${scoreValue}分`,
-          }
-        })
+        const hourRecords = this.formatHourRecords(list)
         this.setData({ hourRecords, isRecordLoading: false })
       })
       .catch((error) => {
-        this.setData({ isRecordLoading: false })
-        wx.showToast({ title: error.message || '记录明细加载失败', icon: 'none' })
+        this.setData({
+          isRecordLoading: false,
+          recordSheetError: error.message || '记录明细加载失败',
+        })
       })
   },
 
@@ -110,6 +109,7 @@ Page({
     this.setData({
       isRecordSheetVisible: false,
       isRecordLoading: false,
+      recordSheetError: '',
       selectedHour: null,
       selectedHourText: '',
       hourRecords: [],
@@ -121,6 +121,10 @@ Page({
     const recordId = Number(event.currentTarget.dataset.id)
     const record = this.data.hourRecords.find((item) => item.recordId === recordId)
     if (!record) return
+    if (!record.canDelete) {
+      wx.showToast({ title: '当前只能查看，不能删除记录', icon: 'none' })
+      return
+    }
 
     wx.showModal({
       title: '删除这条记录？',
@@ -232,23 +236,10 @@ Page({
       return
     }
 
-    this.setData({ isRecordLoading: true })
-    api.fetchHourRecords(userId, behavior.behaviorId, date, hour)
+    this.setData({ isRecordLoading: true, recordSheetError: '' })
+    api.fetchHourRecords(userId, behavior.behaviorId, date, hour, this.getEffectiveSubjectUserId(userId))
       .then((list) => {
-        const hourRecords = list.map((item) => {
-          const recordedAt = item.recordedAt || ''
-          const timeText = recordedAt.length >= 16 ? recordedAt.slice(11, 16) : recordedAt
-          const scoreValue = Number(item.scoreValue || 0)
-          const countNum = Number(item.countNum || 1)
-          return {
-            recordId: Number(item.recordId),
-            recordedAt,
-            timeText: timeText || this.data.selectedHourText,
-            countNum,
-            countText: countNum > 1 ? `${countNum}次` : '1次',
-            scoreText: scoreValue > 0 ? `+${scoreValue}分` : `${scoreValue}分`,
-          }
-        })
+        const hourRecords = this.formatHourRecords(list)
         this.setData({
           hourRecords,
           isRecordLoading: false,
@@ -256,9 +247,40 @@ Page({
         })
       })
       .catch((error) => {
-        this.setData({ isRecordLoading: false })
-        wx.showToast({ title: error.message || '刷新失败', icon: 'none' })
+        this.setData({
+          isRecordLoading: false,
+          recordSheetError: error.message || '刷新失败',
+        })
       })
+  },
+
+  // 单条记录副标题：不再显示“1次”；如果记录者不是当前用户，展示对方当前备注昵称。
+  formatHourRecords(list) {
+    const behaviorName = this.data.behavior && this.data.behavior.behaviorName
+    return list.map((item) => {
+      const recordedAt = item.recordedAt || ''
+      const timeText = recordedAt.length >= 16 ? recordedAt.slice(11, 16) : recordedAt
+      const scoreValue = Number(item.scoreValue || 0)
+      const scoreText = scoreValue > 0 ? `+${scoreValue}分` : `${scoreValue}分`
+      const operatorRecordText = item.showOperatorNote ? (item.operatorRecordText || '') : ''
+
+      return {
+        recordId: Number(item.recordId),
+        recordedAt,
+        timeText: timeText || this.data.selectedHourText,
+        behaviorName,
+        scoreText,
+        scoreClass: scoreValue > 0 ? 'positive' : 'negative',
+        operatorRecordText,
+        hasOperatorRecordText: Boolean(operatorRecordText),
+        canDelete: Number(item.canDelete || 0) === 1,
+      }
+    })
+  },
+
+  // 本人查看自己时，subjectUserId 明确传当前用户，避免后端从旧习惯数据里推断出错。
+  getEffectiveSubjectUserId(userId) {
+    return this.data.subjectUserId || userId || null
   },
 
   // 把 2026-04-24 转成 2026年4月24日，便于做页面标题。

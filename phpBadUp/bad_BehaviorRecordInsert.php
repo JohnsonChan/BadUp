@@ -21,27 +21,34 @@ try {
     }
 
     // 分数按习惯当前类型写入记录表，避免以后修改习惯类型影响历史分数。
-    $behaviorQuery = $pdo->prepare("SELECT userId, behaviorType FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
+    $behaviorQuery = $pdo->prepare("SELECT userId, creatorUserId, subjectUserId, behaviorType FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
     $behaviorQuery->execute([':behaviorId' => $behaviorId]);
     $behavior = $behaviorQuery->fetch();
 
     if (!$behavior) {
         badResponse(404, 'BehaviorNotFound');
     }
-    if ($userId !== null && $behavior['userId'] !== null && intval($behavior['userId']) !== $userId) {
+
+    $behaviorSubjectUserId = badBehaviorSubjectUserId($behavior);
+    $requestSubjectUserId = isset($data['subjectUserId']) && $data['subjectUserId'] !== '' ? intval($data['subjectUserId']) : null;
+    if ($behaviorSubjectUserId !== null && $requestSubjectUserId !== null && $behaviorSubjectUserId !== $requestSubjectUserId) {
         badResponse(403, 'PermissionDenied');
     }
+    $subjectUserId = $behaviorSubjectUserId !== null ? $behaviorSubjectUserId : ($requestSubjectUserId !== null ? $requestSubjectUserId : $userId);
+    badRequireCanManageSubject($pdo, $userId, $subjectUserId);
 
     $scoreValue = $countNum * badScoreUnitByBehaviorType($behavior['behaviorType']);
 
     $stmt = $pdo->prepare("
         INSERT INTO bad_BehaviorRecord
-        (userId, behaviorId, recordDate, recordedAt, countNum, scoreValue, clientUid, createdAt)
+        (userId, operatorUserId, subjectUserId, behaviorId, recordDate, recordedAt, countNum, scoreValue, clientUid, createdAt)
         VALUES
-        (:userId, :behaviorId, :recordDate, :recordedAt, :countNum, :scoreValue, :clientUid, :createdAt)
+        (:userId, :operatorUserId, :subjectUserId, :behaviorId, :recordDate, :recordedAt, :countNum, :scoreValue, :clientUid, :createdAt)
     ");
     $stmt->execute([
-        ':userId' => $userId,
+        ':userId' => $subjectUserId,
+        ':operatorUserId' => $userId,
+        ':subjectUserId' => $subjectUserId,
         ':behaviorId' => $behaviorId,
         ':recordDate' => $recordDate,
         ':recordedAt' => $recordedAt,

@@ -13,6 +13,8 @@ Page({
     leadingDays: [],
     daySummaries: [],
     totalCount: 0,
+    canManageRecords: true,
+    subjectUserId: null,
     weekdays: ['日', '一', '二', '三', '四', '五', '六'],
   },
 
@@ -26,7 +28,13 @@ Page({
       behaviorDesc: decodeURIComponent(options.desc || ''),
       colorHex: decodeURIComponent(options.color || '#F55F52'),
     }
-    this.setData({ behavior, year, month })
+    this.setData({
+      behavior,
+      year,
+      month,
+      subjectUserId: Number(options.subjectUserId) || null,
+      canManageRecords: String(options.canManage || '1') !== '0',
+    })
     this.handledRecordChangeToken = (app.globalData.recordStatsChange || {}).token || 0
     this.load()
   },
@@ -47,7 +55,8 @@ Page({
     }))
     const dayCount = dateUtil.daysInMonth(year, month)
 
-    api.fetchMonthStats(behavior.behaviorId, year, month)
+    const user = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
+    api.fetchMonthStats(behavior.behaviorId, year, month, user && user.userId, this.data.subjectUserId)
       .then((list) => {
         // 先转成 day -> count 的映射，再生成完整的 1~月末数组。
         const counts = {}
@@ -106,7 +115,7 @@ Page({
     const { behavior, year, month } = this.data
     const date = dateUtil.formatDate(dateUtil.dateFromYMD(year, month, day))
     wx.navigateTo({
-      url: `/pages/day-detail/day-detail?behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&color=${encodeURIComponent(behavior.colorHex)}&date=${date}`,
+      url: `/pages/day-detail/day-detail?behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&color=${encodeURIComponent(behavior.colorHex)}&date=${date}&subjectUserId=${this.data.subjectUserId || ''}&canManage=${this.data.canManageRecords ? 1 : 0}`,
     })
   },
 })

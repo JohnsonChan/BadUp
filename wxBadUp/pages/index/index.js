@@ -16,6 +16,12 @@ Page({
 
     // 用户和当天日期。
     user: null,
+    subjectUserId: null,
+    subjectName: '',
+    subjectPermissionLevel: 0,
+    isSubjectMode: false,
+    canManageSubject: true,
+    pageTitle: '芽记',
     todayText: '',
     todayDate: '',
 
@@ -42,10 +48,19 @@ Page({
     isLongPressHolding: false,
   },
 
-  onLoad() {
+  onLoad(options) {
     // 页面启动时先确定“今天”的文案和日期值。
     const now = new Date()
+    const subjectUserId = Number(options && options.subjectUserId)
+    const isSubjectMode = Number.isFinite(subjectUserId) && subjectUserId > 0
+    const permissionLevel = Number(options && options.permissionLevel)
     this.setData({
+      subjectUserId: isSubjectMode ? subjectUserId : null,
+      subjectName: isSubjectMode ? decodeURIComponent((options && options.subjectName) || '') : '',
+      subjectPermissionLevel: isSubjectMode && Number.isFinite(permissionLevel) ? permissionLevel : 0,
+      isSubjectMode,
+      canManageSubject: !isSubjectMode || permissionLevel >= 2,
+      pageTitle: isSubjectMode ? (decodeURIComponent((options && options.subjectName) || '') || '呵护对象') : '芽记',
       todayText: dateUtil.formatChineseDate(now),
       todayDate: dateUtil.formatDate(now),
     })
@@ -53,6 +68,19 @@ Page({
     // 启动流程与 iOS 一致：
     // 1. 闪屏至少展示 1 秒
     // 2. 登录完成且拿到 user 后才进入首页
+    if (isSubjectMode) {
+      const cachedUser = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
+      if (cachedUser && cachedUser.userId) {
+        this.setData({
+          user: cachedUser,
+          isSplashVisible: false,
+          didShowMinimumSplash: true,
+          didFinishLaunchLogin: true,
+        })
+        this.loadToday()
+        return
+      }
+    }
     this.startLaunchFlow()
   },
 
@@ -140,7 +168,7 @@ Page({
     const { user, todayDate } = this.data
     if (!user) return Promise.resolve()
 
-    return api.fetchTodayCounts(user.userId, todayDate)
+    return api.fetchTodayCounts(user.userId, todayDate, this.getActiveSubjectUserId())
       .then((list) => {
         const mapped = list.map((item) => {
           const behavior = this.normalizeBehavior(item)
@@ -200,7 +228,13 @@ Page({
 
   // 进入新增习惯页。
   goAddBehavior() {
-    wx.navigateTo({ url: '/pages/behavior-form/behavior-form' })
+    if (!this.data.canManageSubject) {
+      wx.showToast({ title: '当前只能查看，不能新增习惯', icon: 'none' })
+      return
+    }
+    const subjectUserId = this.getActiveSubjectUserId()
+    const query = this.data.isSubjectMode ? `?subjectUserId=${subjectUserId}` : ''
+    wx.navigateTo({ url: `/pages/behavior-form/behavior-form${query}` })
   },
 
   // 进入更多页。
@@ -212,6 +246,10 @@ Page({
   onBehaviorTap(event) {
     const behaviorId = Number(event.currentTarget.dataset.id)
     if (this.data.isSorting) {
+      return
+    }
+    if (!this.data.canManageSubject) {
+      wx.showToast({ title: '当前只能查看，不能记录', icon: 'none' })
       return
     }
     if (this.data.skipNextTapBehaviorId === behaviorId) {
@@ -258,6 +296,9 @@ Page({
   // 长按只标记状态，等 touchend / touchmove 判断是编辑还是排序。
   onBehaviorLongPress(event) {
     if (this.data.isSorting) {
+      return
+    }
+    if (!this.data.canManageSubject) {
       return
     }
     const behaviorId = Number(event.currentTarget.dataset.id)
@@ -388,7 +429,7 @@ Page({
       return
     }
 
-    api.updateBehaviorSort(user.userId, currentBehaviors.map((item) => item.behaviorId))
+    api.updateBehaviorSort(user.userId, currentBehaviors.map((item) => item.behaviorId), this.getActiveSubjectUserId())
       .catch((error) => {
         this.setData({
           behaviors: originalBehaviors,
@@ -467,6 +508,7 @@ Page({
       pendingRecord.behaviorId,
       todayDate,
       dateUtil.formatDateTime(new Date()),
+      this.getActiveSubjectUserId(),
     )
       .then(() => {
         this.setData({ pendingRecord: null })
@@ -482,7 +524,8 @@ Page({
     const behavior = this.data.pendingAction
     if (!behavior) return
 
-    const url = `/pages/behavior-form/behavior-form?mode=edit&behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&type=${behavior.behaviorType}`
+    const subjectUserId = this.getActiveSubjectUserId()
+    const url = `/pages/behavior-form/behavior-form?mode=edit&behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&type=${behavior.behaviorType}&subjectUserId=${subjectUserId}`
     this.setData({ pendingAction: null })
     wx.navigateTo({ url })
   },
@@ -503,7 +546,7 @@ Page({
     const { user, pendingDelete } = this.data
     if (!user || !pendingDelete) return
 
-    api.deleteBehavior(user.userId, pendingDelete.behaviorId)
+    api.deleteBehavior(user.userId, pendingDelete.behaviorId, this.getActiveSubjectUserId())
       .then(() => {
         this.setData({ pendingDelete: null })
         return this.loadToday()
@@ -521,7 +564,11 @@ Page({
 
     const behavior = item.behavior
     wx.navigateTo({
-      url: `/pages/year-detail/year-detail?behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}`,
+      url: `/pages/year-detail/year-detail?behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&subjectUserId=${this.getActiveSubjectUserId()}&canManage=${this.data.canManageSubject ? 1 : 0}`,
     })
+  },
+
+  getActiveSubjectUserId() {
+    return this.data.subjectUserId || (this.data.user && this.data.user.userId)
   },
 })

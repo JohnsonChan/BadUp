@@ -18,9 +18,8 @@ try {
         badResponse(404, 'BehaviorNotFound');
     }
 
-    if ($userId !== null && $behavior['userId'] !== null && intval($behavior['userId']) !== $userId) {
-        badResponse(403, 'PermissionDenied');
-    }
+    $subjectUserId = badBehaviorSubjectUserId($behavior);
+    badRequireCanManageSubject($pdo, $userId, $subjectUserId);
 
     $stmt = $pdo->prepare("
         UPDATE bad_Behavior

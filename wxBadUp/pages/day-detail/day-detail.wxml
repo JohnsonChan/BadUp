@@ -21,14 +21,27 @@
           class="hour-row {{item.clickable ? 'clickable-hour' : ''}}"
           data-hour="{{item.hour}}"
           data-count="{{item.count}}"
-          bindtap="openHourRecords"
+          catchtap="openHourRecords"
           hover-class="{{item.clickable ? 'hour-row-hover' : 'none'}}"
         >
           <view class="hour-text">{{item.hourText}}</view>
           <view class="hour-line"></view>
-          <view wx:if="{{item.count > 0}}" class="hour-count" style="background: {{behavior.colorHex}};">{{item.count}}次</view>
+          <view
+            wx:if="{{item.count > 0}}"
+            class="hour-count"
+            style="background: {{behavior.colorHex}};"
+            data-hour="{{item.hour}}"
+            data-count="{{item.count}}"
+            catchtap="openHourRecords"
+          >{{item.count}}次</view>
           <view wx:else class="no-count">无记录</view>
-          <view wx:if="{{item.count > 0}}" class="hour-arrow">›</view>
+          <view
+            wx:if="{{item.count > 0}}"
+            class="hour-arrow"
+            data-hour="{{item.hour}}"
+            data-count="{{item.count}}"
+            catchtap="openHourRecords"
+          >›</view>
         </view>
       </view>
     </view>
@@ -48,15 +61,22 @@
       </view>
 
       <view wx:if="{{isRecordLoading}}" class="sheet-loading">加载中...</view>
+      <view wx:elif="{{recordSheetError}}" class="sheet-error">{{recordSheetError}}</view>
       <view wx:elif="{{hourRecords.length === 0}}" class="sheet-empty">这个小时暂无记录</view>
       <view wx:else class="record-list">
         <view wx:for="{{hourRecords}}" wx:key="recordId" class="record-row">
           <view class="record-dot" style="background: {{behavior.colorHex}};"></view>
           <view class="record-main">
             <view class="record-time">{{item.timeText}}</view>
-            <view class="record-meta">{{behavior.behaviorName}} · {{item.countText}} · {{item.scoreText}}</view>
+            <view class="record-meta">
+              <text class="record-meta-name">{{item.behaviorName}}</text>
+              <text wx:if="{{item.hasOperatorRecordText}}" class="record-separator"> · </text>
+              <text wx:if="{{item.hasOperatorRecordText}}" class="record-operator">{{item.operatorRecordText}}</text>
+              <text class="record-separator"> · </text>
+              <text class="record-score {{item.scoreClass}}">{{item.scoreText}}</text>
+            </view>
           </view>
-          <view class="record-delete" data-id="{{item.recordId}}" bindtap="confirmDeleteRecord">删除</view>
+          <view wx:if="{{item.canDelete}}" class="record-delete" data-id="{{item.recordId}}" bindtap="confirmDeleteRecord">删除</view>
         </view>
       </view>
     </view>

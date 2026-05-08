@@ -1,0 +1,164 @@
+<view class="page">
+  <navigation-bar title="呵护关系" color="#182827" background="#F6FBF8"></navigation-bar>
+
+  <scroll-view class="scrollarea" scroll-y>
+    <view class="content">
+      <view class="seed-card" bindtap="copyCareCode" hover-class="seed-card-hover">
+        <view class="seed-row">
+          <text class="seed-label">我的呵护码：</text>
+          <text class="seed-id">{{user.careCode || '-'}}</text>
+          <view class="copy-icon">
+            <view class="copy-icon-back"></view>
+            <view class="copy-icon-front"></view>
+          </view>
+        </view>
+        <view class="seed-tip">只把呵护码给信任的人，对方才能请求呵护你。</view>
+      </view>
+
+      <view class="section">
+        <view class="section-title">请求对方呵护我</view>
+        <view class="input-row">
+          <input class="input code-input" maxlength="6" value="{{careCodeInput}}" placeholder="输入对方6位呵护码" bindinput="onCareCodeInput" />
+        </view>
+
+        <view class="subsection-title">呵护权限</view>
+        <view class="permission-grid">
+          <view
+            wx:for="{{permissions}}"
+            wx:key="value"
+            class="permission-card {{index == 0 ? '' : 'permission-card-spaced'}} {{selectedPermission === item.value ? 'selected' : ''}}"
+            data-value="{{item.value}}"
+            bindtap="selectPermission"
+          >
+            <view class="permission-name">{{item.name}}</view>
+            <view class="permission-desc">{{item.desc}}</view>
+          </view>
+        </view>
+
+        <button class="action-btn" bindtap="requestCare">请求呵护</button>
+      </view>
+
+      <view class="section">
+        <view class="section-title">呵护我的</view>
+        <view wx:if="{{!careAsCared.length}}" class="empty-state">
+          <view class="empty-illustration">
+            <view class="empty-spark spark-left"></view>
+            <view class="empty-spark spark-right"></view>
+            <view class="empty-leaf leaf-one"></view>
+            <view class="empty-leaf leaf-two"></view>
+            <view class="empty-box">
+              <view class="empty-flap flap-left"></view>
+              <view class="empty-flap flap-right"></view>
+              <view class="empty-box-body"></view>
+            </view>
+          </view>
+          <view class="empty-text">还没有人呵护你。</view>
+        </view>
+        <view wx:for="{{careAsCared}}" wx:key="careId" class="relation-row">
+          <view class="relation-avatar">
+            <view class="avatar-leaf leaf-a"></view>
+            <view class="avatar-leaf leaf-b"></view>
+          </view>
+          <view class="relation-main">
+            <view class="relation-name">{{item.relationText}}</view>
+            <view class="relation-meta">用户ID {{item.guardianUserId}} · {{item.permissionName}}</view>
+            <view wx:if="{{item.rejectReason}}" class="reject-reason">原因：{{item.rejectReason}}</view>
+          </view>
+          <view class="relation-side">
+            <view class="status-badge {{item.statusClass}}">{{item.statusName}}</view>
+            <block wx:if="{{item.status === 1}}">
+              <button wx:if="{{item.canUpdatePermission}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openPermissionModal">改权限</button>
+              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="呵护备注" bindtap="openRemarkModal">改备注</button>
+            </block>
+          </view>
+        </view>
+      </view>
+
+      <view class="section">
+        <view class="section-title">我呵护的</view>
+        <view wx:if="{{!careAsGuardian.length}}" class="empty-state">
+          <view class="empty-illustration">
+            <view class="empty-spark spark-left"></view>
+            <view class="empty-spark spark-right"></view>
+            <view class="empty-leaf leaf-one"></view>
+            <view class="empty-leaf leaf-two"></view>
+            <view class="empty-box">
+              <view class="empty-flap flap-left"></view>
+              <view class="empty-flap flap-right"></view>
+              <view class="empty-box-body"></view>
+            </view>
+          </view>
+          <view class="empty-text">还没有你呵护的人。</view>
+        </view>
+        <view wx:for="{{careAsGuardian}}" wx:key="careId" class="relation-row">
+          <view class="relation-avatar">
+            <view class="avatar-leaf leaf-a"></view>
+            <view class="avatar-leaf leaf-b"></view>
+          </view>
+          <view class="relation-main">
+            <view class="relation-name">{{item.relationText}}</view>
+            <view class="relation-meta">用户ID {{item.caredUserId}} · {{item.permissionName}}</view>
+            <view wx:if="{{item.rejectReason}}" class="reject-reason">原因：{{item.rejectReason}}</view>
+          </view>
+          <view class="relation-side">
+            <view class="status-badge {{item.statusClass}}">{{item.statusName}}</view>
+            <block wx:if="{{item.canRespond}}">
+              <view class="request-actions">
+                <button class="small-btn ghost" data-id="{{item.careId}}" bindtap="openRejectModal">拒绝</button>
+                <button class="small-btn" data-id="{{item.careId}}" bindtap="acceptCare">同意</button>
+              </view>
+            </block>
+            <block wx:elif="{{item.status === 1}}">
+              <button class="text-btn" data-userid="{{item.caredUserId}}" data-name="{{item.displayName}}" data-permission="{{item.permissionLevel}}" bindtap="openCaredHome">查看/管理</button>
+              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="呵护备注" bindtap="openRemarkModal">改备注</button>
+            </block>
+          </view>
+        </view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <view wx:if="{{remarkModal}}" class="dialog-mask">
+    <view class="dialog-card">
+      <view class="dialog-title">{{remarkModal.title}}</view>
+      <input class="remark-input" value="{{remarkModal.value}}" placeholder="输入备注名称" bindinput="onRemarkInput" />
+      <view class="dialog-actions">
+        <button class="dialog-btn ghost" bindtap="closeRemarkModal">取消</button>
+        <button class="dialog-btn main" bindtap="saveRemark">保存</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{rejectModal}}" class="dialog-mask">
+    <view class="dialog-card">
+      <view class="dialog-title">拒绝原因</view>
+      <textarea class="reason-input" value="{{rejectModal.value}}" placeholder="请填写拒绝原因，会同步给对方看到" maxlength="120" bindinput="onRejectReasonInput"></textarea>
+      <view class="dialog-actions">
+        <button class="dialog-btn ghost" bindtap="closeRejectModal">取消</button>
+        <button class="dialog-btn danger" bindtap="saveReject">确认拒绝</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{permissionModal}}" class="dialog-mask">
+    <view class="dialog-card">
+      <view class="dialog-title">修改呵护权限</view>
+      <view class="permission-grid modal-permission-grid">
+        <view
+          wx:for="{{permissions}}"
+          wx:key="value"
+          class="permission-card {{index == 0 ? '' : 'permission-card-spaced'}} {{permissionModal.value === item.value ? 'selected' : ''}}"
+          data-value="{{item.value}}"
+          bindtap="selectModalPermission"
+        >
+          <view class="permission-name">{{item.name}}</view>
+          <view class="permission-desc">{{item.desc}}</view>
+        </view>
+      </view>
+      <view class="dialog-actions">
+        <button class="dialog-btn ghost" bindtap="closePermissionModal">取消</button>
+        <button class="dialog-btn main" bindtap="savePermission">保存</button>
+      </view>
+    </view>
+  </view>
+</view>

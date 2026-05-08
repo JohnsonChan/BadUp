@@ -31,14 +31,16 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
 
     $insert = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, createdAt)
+        (userId, creatorUserId, subjectUserId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, createdAt)
         VALUES
-        (:userId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :createdAt)
+        (:userId, :creatorUserId, :subjectUserId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :createdAt)
     ");
 
     foreach ($defaults as $item) {
         $insert->execute([
             ':userId' => $userId,
+            ':creatorUserId' => $userId,
+            ':subjectUserId' => $userId,
             ':behaviorName' => $item[0],
             ':behaviorDesc' => $item[1],
             ':colorHex' => $item[2],
@@ -94,7 +96,7 @@ try {
 
         $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
         $stmt->execute([':userId' => $user['userId']]);
-        badResponse(200, 'logOk', ['data' => $stmt->fetch()]);
+        badResponse(200, 'logOk', ['data' => badAttachCareCode($stmt->fetch())]);
     }
 
     $createdAt = date('Y-m-d H:i:s');
@@ -131,7 +133,7 @@ try {
     );
     $stmt = $pdo->prepare("SELECT * FROM bad_User WHERE userId = :userId LIMIT 1");
     $stmt->execute([':userId' => $userId]);
-    badResponse(200, 'regOk', ['data' => $stmt->fetch()]);
+    badResponse(200, 'regOk', ['data' => badAttachCareCode($stmt->fetch())]);
 } catch (PDOException $e) {
     badResponse(500, 'DataError: ' . $e->getMessage());
 }

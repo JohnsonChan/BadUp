@@ -115,13 +115,19 @@ page {
 /* 单小时记录明细弹层。 */
 .record-sheet-layer {
   position: fixed;
-  inset: 0;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
   z-index: 50;
 }
 
 .record-sheet-mask {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
   background: rgba(18, 29, 27, 0.36);
 }
 
@@ -175,11 +181,17 @@ page {
 }
 
 .sheet-loading,
-.sheet-empty {
+.sheet-empty,
+.sheet-error {
   padding: 42rpx 0;
   color: #899491;
   font-size: 26rpx;
   text-align: center;
+}
+
+.sheet-error {
+  color: #d84f49;
+  line-height: 1.45;
 }
 
 .record-list {
@@ -218,12 +230,38 @@ page {
 }
 
 .record-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
   margin-top: 4rpx;
   color: #7a8784;
   font-size: 24rpx;
+  line-height: 1.35;
+}
+
+.record-meta-name {
+  max-width: 260rpx;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.record-separator {
+  margin: 0 8rpx;
+  color: #a6b0ad;
+}
+
+.record-operator {
+  color: #f55f52;
+}
+
+.record-score.positive {
+  color: #43c77a;
+}
+
+.record-score.negative {
+  color: #f55f52;
 }
 
 .record-delete {

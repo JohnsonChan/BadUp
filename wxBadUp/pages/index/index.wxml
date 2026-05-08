@@ -30,7 +30,7 @@
 
   <block wx:else>
     <!-- 顶部导航：只保留标题，避免自定义按钮和微信胶囊挤在同一行。 -->
-    <navigation-bar title="芽记" back="{{false}}" color="#142827" background="#F2FCF8"></navigation-bar>
+    <navigation-bar title="{{pageTitle}}" back="{{isSubjectMode}}" color="#142827" background="#F2FCF8"></navigation-bar>
 
     <!-- 首页头部操作行：放到微信胶囊下方，避免与系统按钮重叠。 -->
     <view class="top-actions">
@@ -42,8 +42,9 @@
       <view class="content">
         <!-- 当天概览。 -->
         <view class="hero">
-          <view class="hero-title">今日习惯记录</view>
+          <view class="hero-title">{{isSubjectMode ? '今日呵护记录' : '今日习惯记录'}}</view>
           <view class="hero-date">{{todayText}}</view>
+          <view wx:if="{{isSubjectMode && !canManageSubject}}" class="hero-tip">当前权限仅可查看</view>
         </view>
 
         <!-- 可点击记录的习惯按钮列表。 -->

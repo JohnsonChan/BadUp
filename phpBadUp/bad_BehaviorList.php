@@ -4,19 +4,21 @@ require_once "bad_Database.php";
 
 $data = badGetRequestData();
 $userId = isset($data['userId']) && $data['userId'] !== '' ? intval($data['userId']) : null;
+$subjectUserId = isset($data['subjectUserId']) && $data['subjectUserId'] !== '' ? intval($data['subjectUserId']) : $userId;
 
 try {
     $pdo = Database::getPdoInstance();
+    badRequireCanViewSubject($pdo, $userId, $subjectUserId);
 
-    if ($userId) {
+    if ($subjectUserId) {
         $sql = "
             SELECT *
             FROM bad_Behavior
-            WHERE userId IS NULL OR userId = :userId
+            WHERE userId IS NULL OR COALESCE(subjectUserId, userId) = :subjectUserId
             ORDER BY sortOrder ASC, behaviorId ASC
         ";
         $stmt = $pdo->prepare($sql);
-        $stmt->execute([':userId' => $userId]);
+        $stmt->execute([':subjectUserId' => $subjectUserId]);
     } else {
         $sql = "
             SELECT *

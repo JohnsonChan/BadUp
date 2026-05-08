@@ -10,14 +10,20 @@ badRequireFields($data, ['userId']);
 try {
     $pdo = Database::getPdoInstance();
     $userId = intval($data['userId']);
+    $subjectUserId = isset($data['subjectUserId']) && $data['subjectUserId'] !== '' ? intval($data['subjectUserId']) : $userId;
+    badRequireCanViewSubject($pdo, $userId, $subjectUserId);
 
     $stmt = $pdo->prepare("
         SELECT IFNULL(SUM(scoreValue), 0) AS behaviorScore,
                IFNULL(SUM(countNum), 0) AS totalCount
         FROM bad_BehaviorRecord
-        WHERE userId = :userId
+        WHERE subjectUserId = :subjectUserId
+           OR (subjectUserId IS NULL AND userId = :legacyUserId)
     ");
-    $stmt->execute([':userId' => $userId]);
+    $stmt->execute([
+        ':subjectUserId' => $subjectUserId,
+        ':legacyUserId' => $subjectUserId
+    ]);
     $row = $stmt->fetch();
 
     badResponse(200, 'OK', [

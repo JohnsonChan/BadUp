@@ -51,4 +51,235 @@ function badNormalizeBehaviorType($value) {
 function badScoreUnitByBehaviorType($behaviorType) {
     return badNormalizeBehaviorType($behaviorType) === 1 ? 1 : -10;
 }
+
+// 呵护码算法：
+// 1. userId 先经过可逆仿射变换，避免呵护码直接暴露递增 ID。
+// 2. 再转成 6 位 base36 字符串，展示为大写，输入时忽略大小写。
+// 3. 62 位字符虽然容量更大，但大小写容易输错；这里优先降低用户输入成本。
+function badCareCodeAlphabet() {
+    return '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+}
+
+function badMulMod($left, $right, $mod) {
+    $left = $left % $mod;
+    $right = intval($right);
+    $result = 0;
+    while ($right > 0) {
+        if ($right % 2 === 1) {
+            $result = ($result + $left) % $mod;
+        }
+        $left = ($left * 2) % $mod;
+        $right = intval($right / 2);
+    }
+    return $result;
+}
+
+function badEncodeCareCode($userId) {
+    $alphabet = badCareCodeAlphabet();
+    $base = 36;
+    $mod = 2176782336;
+    $a = 1000003;
+    $b = 31415926;
+
+    $userId = intval($userId);
+    if ($userId <= 0 || $userId >= $mod) {
+        return '';
+    }
+
+    $value = (($userId * $a) + $b) % $mod;
+    $code = '';
+    for ($i = 0; $i < 6; $i++) {
+        $index = $value % $base;
+        $code = $alphabet[$index] . $code;
+        $value = intval($value / $base);
+    }
+    return $code;
+}
+
+function badDecodeCareCode($careCode) {
+    $alphabet = badCareCodeAlphabet();
+    $base = 36;
+    $mod = 2176782336;
+    $aInverse = 910375531;
+    $b = 31415926;
+
+    $careCode = strtoupper(trim((string)$careCode));
+    if (!preg_match('/^[0-9A-Za-z]{6}$/', $careCode)) {
+        return 0;
+    }
+
+    $value = 0;
+    for ($i = 0; $i < 6; $i++) {
+        $pos = strpos($alphabet, $careCode[$i]);
+        if ($pos === false) {
+            return 0;
+        }
+        $value = ($value * $base) + $pos;
+    }
+
+    $normalized = ($value - $b) % $mod;
+    if ($normalized < 0) {
+        $normalized += $mod;
+    }
+    $userId = badMulMod($normalized, $aInverse, $mod);
+    if ($userId <= 0 || $userId >= $mod) {
+        return 0;
+    }
+    return intval($userId);
+}
+
+function badAttachCareCode($user) {
+    if (is_array($user) && isset($user['userId'])) {
+        $user['careCode'] = badEncodeCareCode($user['userId']);
+    }
+    return $user;
+}
+
+// 呵护权限等级：1 低权限只查看，2 中权限可查看可改，3 高权限可全权管理。
+function badNormalizeCarePermission($value) {
+    $level = intval($value);
+    if ($level < 1) return 1;
+    if ($level > 3) return 3;
+    return $level;
+}
+
+// 权限等级展示文案，接口直接返回给小程序使用。
+function badCarePermissionName($level) {
+    $level = badNormalizeCarePermission($level);
+    if ($level === 3) return '高权限';
+    if ($level === 2) return '中权限';
+    return '低权限';
+}
+
+// 从习惯行里取“这个习惯作用于谁”。老数据没有 subjectUserId 时回退到 userId。
+function badBehaviorSubjectUserId($behavior) {
+    if (isset($behavior['subjectUserId']) && $behavior['subjectUserId'] !== null && $behavior['subjectUserId'] !== '') {
+        return intval($behavior['subjectUserId']);
+    }
+    if (isset($behavior['userId']) && $behavior['userId'] !== null && $behavior['userId'] !== '') {
+        return intval($behavior['userId']);
+    }
+    return null;
+}
+
+// 从记录行里取“这条记录算到谁身上”。老数据没有 subjectUserId 时回退到 userId。
+function badRecordSubjectUserId($record) {
+    if (isset($record['subjectUserId']) && $record['subjectUserId'] !== null && $record['subjectUserId'] !== '') {
+        return intval($record['subjectUserId']);
+    }
+    if (isset($record['userId']) && $record['userId'] !== null && $record['userId'] !== '') {
+        return intval($record['userId']);
+    }
+    return null;
+}
+
+// 修复旧记录或旧接口写入的数据：
+// subjectUserId 是记录归属人，operatorUserId 是实际操作人。
+// 个人习惯可以从 bad_Behavior.subjectUserId/userId 推出归属；系统默认习惯则退回记录行 userId。
+function badNormalizeBehaviorRecordOwnership($pdo, $behaviorId) {
+    $stmt = $pdo->prepare("
+        UPDATE bad_BehaviorRecord r
+        INNER JOIN bad_Behavior b ON b.behaviorId = r.behaviorId
+        SET r.subjectUserId = CASE
+                WHEN r.subjectUserId IS NULL THEN COALESCE(b.subjectUserId, b.userId, r.userId)
+                ELSE r.subjectUserId
+            END,
+            r.operatorUserId = CASE
+                WHEN r.operatorUserId IS NULL THEN r.userId
+                ELSE r.operatorUserId
+            END
+        WHERE r.behaviorId = :behaviorId
+          AND (r.subjectUserId IS NULL OR r.operatorUserId IS NULL)
+    ");
+    $stmt->execute([':behaviorId' => intval($behaviorId)]);
+}
+
+// 是否有高权限呵护者正在锁定被呵护者自己的修改权。
+function badHasHighCareLock($pdo, $subjectUserId) {
+    $stmt = $pdo->prepare("
+        SELECT careId
+        FROM bad_CareRelation
+        WHERE caredUserId = :subjectUserId
+          AND status = 1
+          AND permissionLevel = 3
+        LIMIT 1
+    ");
+    $stmt->execute([':subjectUserId' => intval($subjectUserId)]);
+    return $stmt->fetch() ? true : false;
+}
+
+// 判断操作者是否可以查看某个用户的习惯和记录。
+function badCanViewSubject($pdo, $actorUserId, $subjectUserId) {
+    if ($subjectUserId === null) {
+        return true;
+    }
+    if ($actorUserId === null) {
+        return false;
+    }
+
+    $actorUserId = intval($actorUserId);
+    $subjectUserId = intval($subjectUserId);
+    if ($actorUserId === $subjectUserId) {
+        return true;
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT careId
+        FROM bad_CareRelation
+        WHERE guardianUserId = :actorUserId
+          AND caredUserId = :subjectUserId
+          AND status = 1
+          AND permissionLevel >= 1
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':actorUserId' => $actorUserId,
+        ':subjectUserId' => $subjectUserId
+    ]);
+    return $stmt->fetch() ? true : false;
+}
+
+// 判断操作者是否可以新增、编辑、删除某个用户的习惯或记录。
+function badCanManageSubject($pdo, $actorUserId, $subjectUserId) {
+    if ($subjectUserId === null) {
+        return $actorUserId === null;
+    }
+    if ($actorUserId === null) {
+        return false;
+    }
+
+    $actorUserId = intval($actorUserId);
+    $subjectUserId = intval($subjectUserId);
+    if ($actorUserId === $subjectUserId) {
+        return !badHasHighCareLock($pdo, $subjectUserId);
+    }
+
+    $stmt = $pdo->prepare("
+        SELECT careId
+        FROM bad_CareRelation
+        WHERE guardianUserId = :actorUserId
+          AND caredUserId = :subjectUserId
+          AND status = 1
+          AND permissionLevel >= 2
+        LIMIT 1
+    ");
+    $stmt->execute([
+        ':actorUserId' => $actorUserId,
+        ':subjectUserId' => $subjectUserId
+    ]);
+    return $stmt->fetch() ? true : false;
+}
+
+// 无权限时统一返回 PermissionDenied，客户端已有对应中文提示。
+function badRequireCanViewSubject($pdo, $actorUserId, $subjectUserId) {
+    if (!badCanViewSubject($pdo, $actorUserId, $subjectUserId)) {
+        badResponse(403, 'PermissionDenied');
+    }
+}
+
+function badRequireCanManageSubject($pdo, $actorUserId, $subjectUserId) {
+    if (!badCanManageSubject($pdo, $actorUserId, $subjectUserId)) {
+        badResponse(403, 'PermissionDenied');
+    }
+}
 ?>

@@ -55,6 +55,11 @@ Page({
     })
   },
 
+  // 进入呵护关系管理页。
+  openCarePage() {
+    wx.navigateTo({ url: '/pages/care/care' })
+  },
+
   // 点击“联系我们”时复制联系方式，减少用户手动选择文本的成本。
   copyContactInfo() {
     wx.setClipboardData({
