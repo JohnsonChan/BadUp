@@ -42,7 +42,7 @@
       <view class="content">
         <!-- 当天概览。 -->
         <view class="hero">
-          <view class="hero-title">{{isSubjectMode ? '今日呵护记录' : '今日习惯记录'}}</view>
+          <view class="hero-title">{{isSubjectMode ? '今日守护记录' : '今日习惯记录'}}</view>
           <view class="hero-date">{{todayText}}</view>
           <view wx:if="{{isSubjectMode && !canManageSubject}}" class="hero-tip">当前权限仅可查看</view>
         </view>
@@ -137,23 +137,31 @@
       </view>
     </view>
 
-    <!-- 首次登录后的微信资料确认：微信要求头像和昵称由用户主动选择/输入。 -->
+    <!-- 首次打开时展示协议弹窗，协议链接走小程序内部协议页。 -->
+    <view wx:if="{{showAgreementPrompt}}" class="dialog-mask">
+      <view class="dialog-card agreement-dialog-card">
+        <view class="dialog-title">协议与隐私政策</view>
+        <view class="dialog-message agreement-message">
+          <text class="agreement-text">欢迎来到芽记-日常打卡次数！这是我们的<text class="agreement-link" catchtap="openPrivacyPolicy">《隐私政策》</text>和<text class="agreement-link" catchtap="openUserAgreement">《用户协议》</text>，请您认真阅读。</text>
+        </view>
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" bindtap="declineAgreement">不同意</button>
+          <button class="dialog-btn main profile-confirm-btn" bindtap="acceptAgreement">同意</button>
+        </view>
+      </view>
+    </view>
+
+    <!-- 首次登录后的昵称确认：同意协议后可触发微信昵称，否则只允许手动输入。 -->
     <view wx:if="{{showProfilePrompt}}" class="dialog-mask">
       <view class="dialog-card profile-dialog-card">
-        <button class="profile-avatar-button" open-type="chooseAvatar" bindchooseavatar="onChooseProfileAvatar">
-          <image wx:if="{{profileAvatarPreview}}" class="profile-avatar-image" src="{{profileAvatarPreview}}" mode="aspectFill"></image>
-          <view wx:else class="profile-avatar-placeholder">
-            <view class="profile-leaf profile-leaf-a"></view>
-            <view class="profile-leaf profile-leaf-b"></view>
-          </view>
-        </button>
         <view class="dialog-title">完善种子信息</view>
         <view class="dialog-message profile-message">
-          <text class="dialog-line">选择微信头像和昵称，用于呵护关系里的展示。</text>
+          <text class="dialog-line">{{profileUseWechatNickname ? '填写昵称或使用微信昵称' : '请手动输入昵称'}}</text>
         </view>
         <view class="profile-form">
-          <view class="profile-field-label">微信昵称</view>
-          <input class="profile-nickname-input" type="nickname" value="{{profileNickName}}" placeholder="点击选择或输入昵称" bindinput="onProfileNicknameInput" />
+          <view class="profile-field-label">{{profileUseWechatNickname ? '微信昵称' : '昵称'}}</view>
+          <input wx:if="{{profileUseWechatNickname}}" class="profile-nickname-input" type="nickname" value="{{profileNickName}}" placeholder="点击选择或输入昵称" bindinput="onProfileNicknameInput" />
+          <input wx:else class="profile-nickname-input" type="text" value="{{profileNickName}}" placeholder="请输入昵称" bindinput="onProfileNicknameInput" />
         </view>
         <view class="dialog-actions">
           <button class="dialog-btn ghost" bindtap="closeProfilePrompt">暂不设置</button>

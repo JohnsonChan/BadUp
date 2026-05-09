@@ -426,6 +426,27 @@ page {
   padding-top: 38rpx;
 }
 
+.agreement-dialog-card {
+  padding-top: 38rpx;
+}
+
+.agreement-message {
+  padding: 0 12rpx;
+  text-align: left;
+}
+
+.agreement-text {
+  display: inline;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.agreement-link {
+  display: inline;
+  color: #1677ff;
+  font-weight: 800;
+}
+
 .profile-avatar-button {
   position: relative;
   width: 132rpx;

@@ -3,9 +3,9 @@ const api = require('../../utils/api')
 const app = getApp()
 
 const permissions = [
-  { value: 1, name: '低权限', desc: '授权查看我的记录' },
-  { value: 2, name: '中权限', desc: '授权修改/查看我的记录' },
-  { value: 3, name: '高权限', desc: '授权修改/查看我的记录（我只能查看）' },
+  { value: 1, name: '低权限', desc: '授权查看我的习惯记录' },
+  { value: 2, name: '中权限', desc: '授权修改/查看我的习惯记录' },
+  { value: 3, name: '高权限', desc: '授权修改/查看我的习惯记录（我只能查看）' },
 ]
 
 Page({
@@ -32,7 +32,7 @@ Page({
       return
     }
 
-    // 旧缓存里没有 careCode 时，重新登录一次从服务端拿临时生成的呵护码。
+    // 旧缓存里没有 careCode 时，重新登录一次从服务端拿临时生成的守护码。
     api.loginOrRegister()
       .then((freshUser) => {
         app.globalData.user = freshUser
@@ -77,14 +77,14 @@ Page({
       const relationDisplayName = displayName === defaultName ? '她/他' : displayName
       const status = Number(item.status || 0)
       const statusClass = status === 1 ? 'accepted' : (status === 2 ? 'rejected' : 'pending')
-      let relationText = mode === 'guardian' ? `正在呵护${relationDisplayName}` : `${relationDisplayName}正在呵护我`
+      let relationText = mode === 'guardian' ? `正在守护${relationDisplayName}` : `${relationDisplayName}正在守护我`
 
       if (mode === 'guardian' && status === 0 && Number(item.requesterUserId) !== userId) {
-        relationText = `${relationDisplayName}请求你呵护`
+        relationText = `${relationDisplayName}请求你守护`
       } else if (mode === 'cared' && status === 0) {
-        relationText = `等待${relationDisplayName}同意呵护我`
+        relationText = `等待${relationDisplayName}同意守护我`
       } else if (mode === 'cared' && status === 2) {
-        relationText = `${relationDisplayName}已拒绝呵护我`
+        relationText = `${relationDisplayName}已拒绝守护我`
       }
 
       return {
@@ -102,13 +102,13 @@ Page({
   copyCareCode() {
     const careCode = this.data.user && this.data.user.careCode
     if (!careCode) {
-      wx.showToast({ title: '呵护码暂不可用，请重新进入小程序', icon: 'none' })
+      wx.showToast({ title: '守护码暂不可用，请重新进入小程序', icon: 'none' })
       return
     }
 
     wx.setClipboardData({
       data: String(careCode),
-      success: () => wx.showToast({ title: '呵护码已复制', icon: 'success' }),
+      success: () => wx.showToast({ title: '守护码已复制', icon: 'success' }),
     })
   },
 
@@ -125,7 +125,7 @@ Page({
     const careCode = this.data.careCodeInput
     if (!userId) return
     if (!/^[0-9A-Z]{6}$/.test(careCode)) {
-      wx.showToast({ title: '请输入6位呵护码', icon: 'none' })
+      wx.showToast({ title: '请输入6位守护码', icon: 'none' })
       return
     }
 
@@ -256,7 +256,7 @@ Page({
         id: Number(event.currentTarget.dataset.id),
         value: Number(event.currentTarget.dataset.permission || 1),
         mode: 'update',
-        title: '修改呵护权限',
+        title: '修改守护权限',
         saveText: '保存',
       },
     })
@@ -268,7 +268,7 @@ Page({
         id: Number(event.currentTarget.dataset.id),
         value: Number(event.currentTarget.dataset.permission || 1),
         mode: 'rerequest',
-        title: '再次请求呵护',
+        title: '再次请求守护',
         saveText: '再请求',
       },
     })
@@ -314,8 +314,8 @@ Page({
     if (!userId || !careId) return
 
     wx.showModal({
-      title: '删除呵护关系',
-      content: '只删除这条呵护关系，不会删除习惯和记录；如果双方互相呵护，另一条反向关系不会受影响。',
+      title: '删除守护关系',
+      content: '只删除这条守护关系，不会删除习惯和记录；如果双方互相守护，另一条反向关系不会受影响。',
       confirmText: '删除',
       confirmColor: '#d84f49',
       success: (res) => {

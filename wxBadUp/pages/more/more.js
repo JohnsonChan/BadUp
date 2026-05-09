@@ -2,8 +2,6 @@ const api = require('../../utils/api')
 
 const app = getApp()
 const contactText = 'BooTry'
-const beianURL = 'https://beian.miit.gov.cn/'
-
 Page({
   data: {
     user: null,
@@ -69,7 +67,7 @@ Page({
     })
   },
 
-  // 进入呵护关系管理页。
+  // 进入守护关系管理页。
   openCarePage() {
     wx.navigateTo({ url: '/pages/care/care' })
   },
@@ -87,10 +85,17 @@ Page({
     })
   },
 
-  // 点击备案号时进入工信部备案查询网页。
-  openBeianPage() {
+  openPrivacyPolicy() {
+    this.openLegalDoc('privacy')
+  },
+
+  openUserAgreement() {
+    this.openLegalDoc('agreement')
+  },
+
+  openLegalDoc(type) {
     wx.navigateTo({
-      url: `/pages/beian-web/beian-web?url=${encodeURIComponent(beianURL)}`,
+      url: `/pages/legal/legal?type=${encodeURIComponent(type)}`,
     })
   },
 

@@ -69,8 +69,8 @@ function formatApiMessage(message) {
   ) {
     return '微信登录失败，请稍后重试'
   }
-  if (text.indexOf('呵护申请已发送') !== -1 || text.indexOf('CareRequestPending') !== -1) {
-    return '呵护申请已发送，请等待对方确认'
+  if (text.indexOf('守护申请已发送') !== -1 || text.indexOf('CareRequestPending') !== -1) {
+    return '守护申请已发送，请等待对方确认'
   }
   return text
 }
@@ -269,17 +269,17 @@ function updateCareRemark(userId, careId, remark) {
   return request('bad_CareRemarkUpdate.php', { userId, careId, remark })
 }
 
-// 修改已建立呵护关系的权限。服务端只允许发起方修改。
+// 修改已建立守护关系的权限。服务端只允许发起方修改。
 function updateCarePermission(userId, careId, permissionLevel) {
   return request('bad_CarePermissionUpdate.php', { userId, careId, permissionLevel })
 }
 
-// 被拒绝后重新发起呵护请求。
+// 被拒绝后重新发起守护请求。
 function rerequestCare(userId, careId, permissionLevel) {
   return request('bad_CareRerequest.php', { userId, careId, permissionLevel })
 }
 
-// 删除自己创建的呵护关系；双向呵护时只删除当前这一条方向。
+// 删除自己创建的守护关系；双向守护时只删除当前这一条方向。
 function deleteCare(userId, careId) {
   return request('bad_CareDelete.php', { userId, careId })
 }

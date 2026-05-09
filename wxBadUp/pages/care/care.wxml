@@ -1,27 +1,27 @@
 <view class="page">
-  <navigation-bar title="呵护关系" color="#182827" background="#F6FBF8"></navigation-bar>
+  <navigation-bar title="守护关系" color="#182827" background="#F6FBF8"></navigation-bar>
 
   <scroll-view class="scrollarea" scroll-y>
     <view class="content">
       <view class="seed-card" bindtap="copyCareCode" hover-class="seed-card-hover">
         <view class="seed-row">
-          <text class="seed-label">我的呵护码：</text>
+          <text class="seed-label">我的守护码：</text>
           <text class="seed-id">{{user.careCode || '-'}}</text>
           <view class="copy-icon">
             <view class="copy-icon-back"></view>
             <view class="copy-icon-front"></view>
           </view>
         </view>
-        <view class="seed-tip">只把呵护码给信任的人，对方才能请求呵护你。</view>
+        <view class="seed-tip">只把守护码给信任的人，对方才能请求守护你。</view>
       </view>
 
       <view class="section">
-        <view class="section-title">请求对方呵护我</view>
+        <view class="section-title">请求对方守护我</view>
         <view class="input-row">
-          <input class="input code-input" maxlength="6" value="{{careCodeInput}}" placeholder="输入对方6位呵护码" bindinput="onCareCodeInput" />
+          <input class="input code-input" maxlength="6" value="{{careCodeInput}}" placeholder="输入对方6位守护码" bindinput="onCareCodeInput" />
         </view>
 
-        <view class="subsection-title">呵护权限</view>
+        <view class="subsection-title">守护权限</view>
         <view class="permission-grid">
           <view
             wx:for="{{permissions}}"
@@ -35,11 +35,11 @@
           </view>
         </view>
 
-        <button class="action-btn" bindtap="requestCare">请求呵护</button>
+        <button class="action-btn" bindtap="requestCare">请求守护</button>
       </view>
 
       <view class="section">
-        <view class="section-title">呵护我的</view>
+        <view class="section-title">守护我的</view>
         <view wx:if="{{!careAsCared.length}}" class="empty-state">
           <view class="empty-illustration">
             <view class="empty-spark spark-left"></view>
@@ -52,7 +52,7 @@
               <view class="empty-box-body"></view>
             </view>
           </view>
-          <view class="empty-text">还没有人呵护你。</view>
+          <view class="empty-text">还没有人守护你。</view>
         </view>
         <view wx:for="{{careAsCared}}" wx:key="careId" class="relation-row">
           <view class="relation-avatar">
@@ -67,7 +67,7 @@
           <view class="relation-side">
             <block wx:if="{{item.status === 1}}">
               <button wx:if="{{item.canUpdatePermission}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openPermissionModal">改权限</button>
-              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="呵护备注" bindtap="openRemarkModal">改备注</button>
+              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="守护备注" bindtap="openRemarkModal">改备注</button>
             </block>
             <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openRerequestModal">再请求</button>
             <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" bindtap="confirmDeleteCare">删除</button>
@@ -76,7 +76,7 @@
       </view>
 
       <view class="section">
-        <view class="section-title">我呵护的</view>
+        <view class="section-title">我守护的</view>
         <view wx:if="{{!careAsGuardian.length}}" class="empty-state">
           <view class="empty-illustration">
             <view class="empty-spark spark-left"></view>
@@ -89,7 +89,7 @@
               <view class="empty-box-body"></view>
             </view>
           </view>
-          <view class="empty-text">还没有你呵护的人。</view>
+          <view class="empty-text">还没有你守护的人。</view>
         </view>
         <view wx:for="{{careAsGuardian}}" wx:key="careId" class="relation-row">
           <view class="relation-avatar">
@@ -110,7 +110,7 @@
             </block>
             <block wx:elif="{{item.status === 1}}">
               <button class="text-btn" data-userid="{{item.caredUserId}}" data-name="{{item.displayName}}" data-permission="{{item.permissionLevel}}" bindtap="openCaredHome">查看/管理</button>
-              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="呵护备注" bindtap="openRemarkModal">改备注</button>
+              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="守护备注" bindtap="openRemarkModal">改备注</button>
             </block>
             <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openRerequestModal">再请求</button>
             <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" bindtap="confirmDeleteCare">删除</button>

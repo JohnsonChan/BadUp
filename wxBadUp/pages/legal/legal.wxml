@@ -1,0 +1,9 @@
+<view class="page">
+  <navigation-bar title="{{title}}" color="#182827" background="#F6FBF8"></navigation-bar>
+
+  <scroll-view class="scrollarea" scroll-y>
+    <view class="content">
+      <rich-text nodes="{{nodes}}"></rich-text>
+    </view>
+  </scroll-view>
+</view>

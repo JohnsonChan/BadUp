@@ -1,0 +1,22 @@
+page {
+  min-height: 100vh;
+  background: #f6fbf8;
+}
+
+.page {
+  height: 100vh;
+  overflow: hidden;
+  background: #f6fbf8;
+}
+
+.scrollarea {
+  height: calc(100vh - 96rpx);
+}
+
+.content {
+  margin: 26rpx 28rpx calc(64rpx + env(safe-area-inset-bottom));
+  padding: 34rpx 30rpx 42rpx;
+  border-radius: 30rpx;
+  background: #fff;
+  box-shadow: 0 16rpx 36rpx rgba(30, 54, 50, 0.06);
+}

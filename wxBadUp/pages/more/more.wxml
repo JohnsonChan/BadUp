@@ -16,7 +16,7 @@
         </view>
       </view>
       <view class="row"><text>种子编号</text><text>{{user.userId || '-'}}</text></view>
-      <view class="row clickable-row" bindtap="openCarePage" hover-class="row-hover"><text>呵护关系</text><text>管理关系</text></view>
+      <view class="row clickable-row" bindtap="openCarePage" hover-class="row-hover"><text>守护关系</text><text>管理关系</text></view>
       <view class="row clickable-row" bindtap="openGrowthIndexPage" hover-class="row-hover"><text>生长指数</text><text class="score-value {{behaviorScoreClass}}">{{behaviorScore}}</text></view>
       <view class="row"><text>播种日期</text><text>{{registerDate}}</text></view>
       <view class="row"><text>发芽土地</text><text>{{platformName}}</text></view>
@@ -30,8 +30,12 @@
     </view>
   </view>
 
-  <view class="beian-footer" bindtap="openBeianPage" hover-class="beian-footer-hover">
+  <view class="legal-footer-links">
+    <text class="legal-footer-link" bindtap="openPrivacyPolicy">《隐私政策》</text>
+    <text class="legal-footer-link" bindtap="openUserAgreement">《用户协议》</text>
+  </view>
+
+  <view class="beian-footer">
     <text>ICP备案信息：粤ICP备19008987号-2X</text>
-    <text class="beian-arrow">›</text>
   </view>
 </view>

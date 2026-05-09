@@ -4,6 +4,7 @@ const dateUtil = require('../../utils/date')
 const app = getApp()
 const behaviorCardDescLimit = 88
 const countRowDescLimit = 66
+const agreementStorageKey = 'badup.legal.agreement.choice'
 
 Page({
   data: {
@@ -38,7 +39,9 @@ Page({
     pendingRecord: null,
     pendingAction: null,
     pendingDelete: null,
+    showAgreementPrompt: false,
     showProfilePrompt: false,
+    profileUseWechatNickname: false,
     profileSubmitting: false,
     profileNickName: '',
     profileAvatarPreview: '',
@@ -65,7 +68,7 @@ Page({
       subjectPermissionLevel: isSubjectMode && Number.isFinite(permissionLevel) ? permissionLevel : 0,
       isSubjectMode,
       canManageSubject: !isSubjectMode || permissionLevel >= 2,
-      pageTitle: isSubjectMode ? (decodeURIComponent((options && options.subjectName) || '') || '呵护对象') : '芽记',
+      pageTitle: isSubjectMode ? (decodeURIComponent((options && options.subjectName) || '') || '守护对象') : '芽记',
       todayText: dateUtil.formatChineseDate(now),
       todayDate: dateUtil.formatDate(now),
     })
@@ -147,7 +150,7 @@ Page({
           didFinishLaunchLogin: true,
         }, () => {
           this.syncSplashVisibility()
-          this.maybeShowProfilePrompt(user)
+          this.maybeShowAgreementOrProfilePrompt(user)
         })
         return this.loadToday()
       })
@@ -169,13 +172,29 @@ Page({
     this.startLaunchFlow()
   },
 
-  // 首次登录后，如果服务端还没有昵称和头像，就提示用户主动确认获取微信资料。
-  maybeShowProfilePrompt(user) {
+  // 首次登录后先展示协议弹窗；用户同意后才允许触发微信昵称能力。
+  maybeShowAgreementOrProfilePrompt(user) {
     if (this.data.isSubjectMode || !user || !user.userId) {
       return
     }
 
-    if (user.userName && user.avatar) {
+    const agreementChoice = wx.getStorageSync(agreementStorageKey)
+    if (!agreementChoice) {
+      this.setData({ showAgreementPrompt: true })
+      return
+    }
+
+    this.maybeShowProfilePrompt(user, agreementChoice === 'accepted')
+  },
+
+  // 如果服务端还没有昵称，就提示用户补充昵称。
+  // agreeAgreement 后使用 type="nickname"，declineAgreement 后只使用普通文本输入。
+  maybeShowProfilePrompt(user, useWechatNickname) {
+    if (this.data.isSubjectMode || !user || !user.userId) {
+      return
+    }
+
+    if (user.userName) {
       return
     }
 
@@ -186,9 +205,38 @@ Page({
 
     this.setData({
       showProfilePrompt: true,
+      profileUseWechatNickname: !!useWechatNickname,
       profileNickName: user.userName || '',
       profileAvatarPreview: user.avatar || '',
       profileAvatarTempPath: '',
+    })
+  },
+
+  acceptAgreement() {
+    wx.setStorageSync(agreementStorageKey, 'accepted')
+    this.setData({ showAgreementPrompt: false }, () => {
+      this.maybeShowProfilePrompt(this.data.user, true)
+    })
+  },
+
+  declineAgreement() {
+    wx.setStorageSync(agreementStorageKey, 'declined')
+    this.setData({ showAgreementPrompt: false }, () => {
+      this.maybeShowProfilePrompt(this.data.user, false)
+    })
+  },
+
+  openPrivacyPolicy() {
+    this.openLegalDoc('privacy')
+  },
+
+  openUserAgreement() {
+    this.openLegalDoc('agreement')
+  },
+
+  openLegalDoc(type) {
+    wx.navigateTo({
+      url: `/pages/legal/legal?type=${encodeURIComponent(type)}`,
     })
   },
 
@@ -199,6 +247,7 @@ Page({
     }
     this.setData({
       showProfilePrompt: false,
+      profileUseWechatNickname: false,
       profileSubmitting: false,
       profileNickName: '',
       profileAvatarPreview: '',
@@ -206,16 +255,7 @@ Page({
     })
   },
 
-  onChooseProfileAvatar(event) {
-    const avatarUrl = event.detail && event.detail.avatarUrl
-    if (!avatarUrl) {
-      return
-    }
-    this.setData({
-      profileAvatarPreview: avatarUrl,
-      profileAvatarTempPath: avatarUrl,
-    })
-  },
+  // 已停用头像选择：不绑定 chooseAvatar，不上传头像，用户信息页使用默认头像。
 
   onProfileNicknameInput(event) {
     this.setData({
@@ -235,23 +275,13 @@ Page({
       return
     }
 
-    if (!this.data.profileAvatarPreview) {
-      wx.showToast({ title: '请选择微信头像', icon: 'none' })
-      return
-    }
-
     this.setData({ profileSubmitting: true })
 
-    const uploadTask = this.data.profileAvatarTempPath
-      ? api.uploadAvatar(user.userId, this.data.profileAvatarTempPath).then((data) => data.avatar || '')
-      : Promise.resolve(user.avatar || '')
-
-    uploadTask
-      .then((avatar) => api.updateUserProfile(user.userId, userName, avatar))
+    api.updateUserProfile(user.userId, userName, '')
       .then((updatedUser) => {
         const mergedUser = Object.assign({}, user, updatedUser || {}, {
           userName: (updatedUser && updatedUser.userName) || userName,
-          avatar: (updatedUser && updatedUser.avatar) || this.data.profileAvatarPreview,
+          avatar: (updatedUser && updatedUser.avatar) || user.avatar || '',
         })
         app.globalData.user = mergedUser
         wx.setStorageSync('badup.cached.user', mergedUser)
@@ -259,6 +289,7 @@ Page({
         this.setData({
           user: mergedUser,
           showProfilePrompt: false,
+          profileUseWechatNickname: false,
           profileSubmitting: false,
           profileNickName: '',
           profileAvatarPreview: '',
