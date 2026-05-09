@@ -53,6 +53,7 @@ function badMapCareRow($row, $currentUserId, $mode) {
         'isRequester' => intval($row['requesterUserId']) === intval($currentUserId) ? 1 : 0,
         'canUpdatePermission' => ($status === 1 && intval($row['requesterUserId']) === intval($currentUserId)) ? 1 : 0,
         'canRespond' => ($status === 0 && intval($row['guardianUserId']) === intval($currentUserId) && intval($row['requesterUserId']) !== intval($currentUserId)) ? 1 : 0,
+        'canDelete' => intval($row['requesterUserId']) === intval($currentUserId) ? 1 : 0,
         'createdAt' => $row['createdAt']
     ];
 }

@@ -13,7 +13,6 @@
         </view>
         <view class="profile-info">
           <view class="profile-name">{{displayName}}</view>
-          <view class="profile-subtitle">种子编号 {{user.userId || '-'}}</view>
         </view>
       </view>
       <view class="row"><text>种子编号</text><text>{{user.userId || '-'}}</text></view>
@@ -32,7 +31,7 @@
   </view>
 
   <view class="beian-footer" bindtap="openBeianPage" hover-class="beian-footer-hover">
-    <text>ICP备案信息：粤ICP备19008987号-1</text>
+    <text>ICP备案信息：粤ICP备19008987号-2X</text>
     <text class="beian-arrow">›</text>
   </view>
 </view>

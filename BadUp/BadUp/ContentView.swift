@@ -102,6 +102,38 @@ private enum BehaviorKind: Int, CaseIterable, Identifiable, Hashable {
     }
 }
 
+// 呵护权限，与小程序保持一致。
+private enum CarePermission: Int, CaseIterable, Identifiable, Hashable {
+    case low = 1
+    case middle = 2
+    case high = 3
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .low: return "低权限"
+        case .middle: return "中权限"
+        case .high: return "高权限"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .low:
+            return "授权查看我的记录"
+        case .middle:
+            return "授权修改/查看我的记录"
+        case .high:
+            return "授权修改/查看我的记录（我只能查看）"
+        }
+    }
+
+    static func from(_ value: Int) -> CarePermission {
+        CarePermission(rawValue: value) ?? .low
+    }
+}
+
 private extension Array where Element == ColorPaletteItem {
     static let extendedBehaviorPalette: [ColorPaletteItem] = [
         ColorPaletteItem(hex: "#F55F52", name: "珊瑚红", color: Color(red: 0.96, green: 0.37, blue: 0.32)),
@@ -223,6 +255,89 @@ private struct BehaviorRecordItem: Identifiable, Hashable {
     }
 }
 
+private struct CareRelationItem: Identifiable, Hashable {
+    let careId: Int
+    let guardianUserId: Int
+    let guardianUserName: String?
+    let caredUserId: Int
+    let caredUserName: String?
+    let otherUserId: Int
+    let otherUserName: String?
+    let remark: String
+    let displayName: String
+    let permissionLevel: Int
+    let permissionName: String
+    let status: Int
+    let statusName: String
+    let rejectReason: String
+    let requesterUserId: Int
+    let isRequester: Bool
+    let canUpdatePermission: Bool
+    let canRespond: Bool
+    let createdAt: String?
+
+    var id: Int { careId }
+
+    var permission: CarePermission {
+        CarePermission.from(permissionLevel)
+    }
+
+    var isAccepted: Bool {
+        status == 1
+    }
+
+    var statusTint: Color {
+        switch status {
+        case 1:
+            return Color(red: 0.11, green: 0.36, blue: 0.28)
+        case 2:
+            return Color(red: 0.86, green: 0.31, blue: 0.29)
+        default:
+            return Color(red: 0.82, green: 0.50, blue: 0.16)
+        }
+    }
+
+    var relationDisplayName: String {
+        displayName == "种子\(otherUserId)" ? "她/他" : displayName
+    }
+
+    func relationText(mode: CareRelationMode, currentUserId: Int) -> String {
+        let name = relationDisplayName
+        switch mode {
+        case .guardian:
+            if status == 0 && requesterUserId != currentUserId {
+                return "\(name)请求你呵护"
+            }
+            return "正在呵护\(name)"
+        case .cared:
+            if status == 0 {
+                return "等待\(name)同意呵护我"
+            }
+            if status == 2 {
+                return "\(name)已拒绝呵护我"
+            }
+            return "\(name)正在呵护我"
+        }
+    }
+}
+
+private enum CareRelationMode: Equatable {
+    case guardian
+    case cared
+}
+
+// 呵护关系页使用固定浅色视觉，避免系统暗色模式下出现白底白字。
+private enum CareTheme {
+    static let ink = Color(red: 0.07, green: 0.13, blue: 0.12)
+    static let green = Color(red: 0.11, green: 0.29, blue: 0.24)
+    static let softGreen = Color(red: 0.87, green: 0.95, blue: 0.90)
+    static let page = Color(red: 0.95, green: 0.99, blue: 0.97)
+    static let card = Color(red: 1.00, green: 1.00, blue: 0.99)
+    static let row = Color(red: 0.95, green: 0.97, blue: 0.96)
+    static let muted = Color(red: 0.44, green: 0.50, blue: 0.48)
+    static let danger = Color(red: 0.86, green: 0.31, blue: 0.29)
+}
+
 // 服务器习惯接口封装。
 // 页面层只和这个服务交互，不直接拼 PHP 接口参数。
 private final class RemoteBehaviorService {
@@ -256,13 +371,21 @@ private final class RemoteBehaviorService {
         session = URLSession(configuration: config)
     }
 
-    func fetchTodayCounts(userId: Int, date: Date = Date()) async throws -> [DailyBehaviorCount] {
+    private func payload(_ values: [String: Any], subjectUserId: Int?) -> [String: Any] {
+        var result = values
+        if let subjectUserId {
+            result["subjectUserId"] = subjectUserId
+        }
+        return result
+    }
+
+    func fetchTodayCounts(userId: Int, date: Date = Date(), subjectUserId: Int? = nil) async throws -> [DailyBehaviorCount] {
         let response: ServerListResponse<ServerBehaviorToday> = try await post(
             "bad_BehaviorTodayCount.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "recordDate": dateFormatter.string(from: date)
-            ]
+            ], subjectUserId: subjectUserId)
         )
 
         return (response.list ?? []).map { item in
@@ -273,74 +396,78 @@ private final class RemoteBehaviorService {
         }
     }
 
-    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind) async throws {
+    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind, subjectUserId: Int? = nil) async throws {
         let _: ServerDataResponse<ServerBehavior> = try await post(
             "bad_BehaviorInsert.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "behaviorName": name,
                 "behaviorDesc": detail,
                 "colorHex": colorHex,
                 "behaviorType": behaviorKind.rawValue
-            ]
+            ], subjectUserId: subjectUserId)
         )
     }
 
-    func updateBehavior(userId: Int, behavior: BehaviorItem, name: String, detail: String, colorHex: String) async throws {
+    func updateBehavior(userId: Int, behavior: BehaviorItem, name: String, detail: String, colorHex: String, subjectUserId: Int? = nil) async throws {
         let _: ServerDataResponse<ServerBehavior> = try await post(
             "bad_BehaviorUpdate.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "behaviorId": Int(behavior.id),
                 "behaviorName": name,
                 "behaviorDesc": detail,
                 "colorHex": colorHex
-            ]
+            ], subjectUserId: subjectUserId)
         )
     }
 
-    func deleteBehavior(userId: Int, behavior: BehaviorItem) async throws {
+    func deleteBehavior(userId: Int, behavior: BehaviorItem, subjectUserId: Int? = nil) async throws {
         let _: EmptyServerResponse = try await post(
             "bad_BehaviorDelete.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "behaviorId": Int(behavior.id)
-            ]
+            ], subjectUserId: subjectUserId)
         )
     }
 
-    func updateBehaviorSort(userId: Int, behaviors: [BehaviorItem]) async throws {
+    func updateBehaviorSort(userId: Int, behaviors: [BehaviorItem], subjectUserId: Int? = nil) async throws {
         let behaviorIds = behaviors.map { Int($0.id) }
         let _: ServerDataResponse<ServerSortUpdate> = try await post(
             "bad_BehaviorSortUpdate.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "behaviorIds": behaviorIds
-            ]
+            ], subjectUserId: subjectUserId)
         )
     }
 
-    func insertRecord(userId: Int, behavior: BehaviorItem, date: Date = Date()) async throws {
+    func insertRecord(userId: Int, behavior: BehaviorItem, date: Date = Date(), subjectUserId: Int? = nil) async throws {
         let _: EmptyServerResponse = try await post(
             "bad_BehaviorRecordInsert.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "behaviorId": Int(behavior.id),
                 "recordDate": dateFormatter.string(from: date),
                 "recordedAt": dateTimeFormatter.string(from: date),
                 "countNum": 1,
                 "clientUid": UUID().uuidString
-            ]
+            ], subjectUserId: subjectUserId)
         )
     }
 
-    func fetchMonthSummaries(behavior: BehaviorItem, year: Int) async throws -> [MonthSummary] {
+    func fetchMonthSummaries(behavior: BehaviorItem, year: Int, userId: Int? = nil, subjectUserId: Int? = nil) async throws -> [MonthSummary] {
+        var requestPayload: [String: Any] = [
+            "behaviorId": Int(behavior.id),
+            "year": year
+        ]
+        if let userId {
+            requestPayload["userId"] = userId
+        }
         let response: ServerListResponse<ServerMonthSummary> = try await post(
             "bad_BehaviorYearStats.php",
-            payload: [
-                "behaviorId": Int(behavior.id),
-                "year": year
-            ]
+            payload: payload(requestPayload, subjectUserId: subjectUserId)
         )
         var counts = Dictionary(uniqueKeysWithValues: (1...12).map { ($0, 0) })
         for item in response.list ?? [] {
@@ -349,7 +476,7 @@ private final class RemoteBehaviorService {
         return (1...12).map { MonthSummary(month: $0, count: counts[$0, default: 0]) }
     }
 
-    func fetchDaySummaries(behavior: BehaviorItem, year: Int, month: Int) async throws -> [DaySummary] {
+    func fetchDaySummaries(behavior: BehaviorItem, year: Int, month: Int, userId: Int? = nil, subjectUserId: Int? = nil) async throws -> [DaySummary] {
         var calendar = Calendar(identifier: .gregorian)
         calendar.locale = Locale(identifier: "zh_CN")
         calendar.timeZone = .current
@@ -361,13 +488,17 @@ private final class RemoteBehaviorService {
             return []
         }
 
+        var requestPayload: [String: Any] = [
+            "behaviorId": Int(behavior.id),
+            "year": year,
+            "month": month
+        ]
+        if let userId {
+            requestPayload["userId"] = userId
+        }
         let response: ServerListResponse<ServerDaySummary> = try await post(
             "bad_BehaviorMonthStats.php",
-            payload: [
-                "behaviorId": Int(behavior.id),
-                "year": year,
-                "month": month
-            ]
+            payload: payload(requestPayload, subjectUserId: subjectUserId)
         )
         var counts = Dictionary(uniqueKeysWithValues: dayRange.map { ($0, 0) })
         for item in response.list ?? [] {
@@ -381,13 +512,17 @@ private final class RemoteBehaviorService {
         }
     }
 
-    func fetchHourSummaries(behavior: BehaviorItem, date: Date) async throws -> [HourSummary] {
+    func fetchHourSummaries(behavior: BehaviorItem, date: Date, userId: Int? = nil, subjectUserId: Int? = nil) async throws -> [HourSummary] {
+        var requestPayload: [String: Any] = [
+            "behaviorId": Int(behavior.id),
+            "recordDate": dateFormatter.string(from: date)
+        ]
+        if let userId {
+            requestPayload["userId"] = userId
+        }
         let response: ServerListResponse<ServerHourSummary> = try await post(
             "bad_BehaviorDayStats.php",
-            payload: [
-                "behaviorId": Int(behavior.id),
-                "recordDate": dateFormatter.string(from: date)
-            ]
+            payload: payload(requestPayload, subjectUserId: subjectUserId)
         )
         var counts = Dictionary(uniqueKeysWithValues: (0...23).map { ($0, 0) })
         for item in response.list ?? [] {
@@ -396,26 +531,26 @@ private final class RemoteBehaviorService {
         return (0...23).map { HourSummary(hour: $0, count: counts[$0, default: 0]) }
     }
 
-    func fetchHourRecords(userId: Int, behavior: BehaviorItem, date: Date, hour: Int) async throws -> [BehaviorRecordItem] {
+    func fetchHourRecords(userId: Int, behavior: BehaviorItem, date: Date, hour: Int, subjectUserId: Int? = nil) async throws -> [BehaviorRecordItem] {
         let response: ServerListResponse<ServerBehaviorRecord> = try await post(
             "bad_BehaviorRecordHourList.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "behaviorId": Int(behavior.id),
                 "recordDate": dateFormatter.string(from: date),
                 "hourNum": hour
-            ]
+            ], subjectUserId: subjectUserId)
         )
         return (response.list ?? []).map(\.recordItem)
     }
 
-    func deleteBehaviorRecord(userId: Int, record: BehaviorRecordItem) async throws {
+    func deleteBehaviorRecord(userId: Int, record: BehaviorRecordItem, subjectUserId: Int? = nil) async throws {
         let _: EmptyServerResponse = try await post(
             "bad_BehaviorRecordDelete.php",
-            payload: [
+            payload: payload([
                 "userId": userId,
                 "recordId": Int(record.id)
-            ]
+            ], subjectUserId: subjectUserId)
         )
     }
 
@@ -427,6 +562,85 @@ private final class RemoteBehaviorService {
             ]
         )
         return response.data ?? UserBehaviorScore(behaviorScore: 0, totalCount: 0)
+    }
+
+    func fetchCareList(userId: Int) async throws -> CareListResult {
+        let response: ServerCareListResponse = try await post(
+            "bad_CareList.php",
+            payload: [
+                "userId": userId
+            ]
+        )
+        return CareListResult(
+            careAsGuardian: (response.careAsGuardian ?? []).map(\.careRelationItem),
+            careAsCared: (response.careAsCared ?? []).map(\.careRelationItem)
+        )
+    }
+
+    func requestCare(userId: Int, careCode: String, permission: CarePermission) async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_CareRequest.php",
+            payload: [
+                "userId": userId,
+                "careCode": careCode,
+                "permissionLevel": permission.rawValue
+            ]
+        )
+    }
+
+    func respondCare(userId: Int, careId: Int, action: String, rejectReason: String = "") async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_CareRespond.php",
+            payload: [
+                "userId": userId,
+                "careId": careId,
+                "action": action,
+                "rejectReason": rejectReason
+            ]
+        )
+    }
+
+    func updateCareRemark(userId: Int, careId: Int, remark: String) async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_CareRemarkUpdate.php",
+            payload: [
+                "userId": userId,
+                "careId": careId,
+                "remark": remark
+            ]
+        )
+    }
+
+    func updateCarePermission(userId: Int, careId: Int, permission: CarePermission) async throws {
+        let _: ServerDataResponse<ServerCarePermissionUpdate> = try await post(
+            "bad_CarePermissionUpdate.php",
+            payload: [
+                "userId": userId,
+                "careId": careId,
+                "permissionLevel": permission.rawValue
+            ]
+        )
+    }
+
+    func rerequestCare(userId: Int, careId: Int, permission: CarePermission) async throws {
+        let _: ServerDataResponse<ServerCarePermissionUpdate> = try await post(
+            "bad_CareRerequest.php",
+            payload: [
+                "userId": userId,
+                "careId": careId,
+                "permissionLevel": permission.rawValue
+            ]
+        )
+    }
+
+    func deleteCare(userId: Int, careId: Int) async throws {
+        let _: EmptyServerResponse = try await post(
+            "bad_CareDelete.php",
+            payload: [
+                "userId": userId,
+                "careId": careId
+            ]
+        )
     }
 
     private func post<T: Decodable>(_ endpoint: String, payload: [String: Any]) async throws -> T {
@@ -575,6 +789,74 @@ private struct UserBehaviorScore: Decodable {
     }
 }
 
+private struct CareListResult {
+    let careAsGuardian: [CareRelationItem]
+    let careAsCared: [CareRelationItem]
+}
+
+private struct ServerCareListResponse: Decodable, ServerResponseChecking {
+    let code: Int
+    let msg: String
+    let careAsGuardian: [ServerCareRelation]?
+    let careAsCared: [ServerCareRelation]?
+}
+
+private struct ServerCarePermissionUpdate: Decodable {
+    let careId: LossyInt?
+    let permissionLevel: LossyInt?
+    let permissionName: String?
+}
+
+private struct ServerCareRelation: Decodable {
+    let careId: LossyInt
+    let guardianUserId: LossyInt
+    let guardianUserName: String?
+    let caredUserId: LossyInt
+    let caredUserName: String?
+    let otherUserId: LossyInt?
+    let otherUserName: String?
+    let remark: String?
+    let displayName: String?
+    let permissionLevel: LossyInt
+    let permissionName: String?
+    let status: LossyInt
+    let statusName: String?
+    let rejectReason: String?
+    let requesterUserId: LossyInt
+    let isRequester: LossyInt?
+    let canUpdatePermission: LossyInt?
+    let canRespond: LossyInt?
+    let createdAt: String?
+
+    var careRelationItem: CareRelationItem {
+        let guardianId = guardianUserId.intValue
+        let caredId = caredUserId.intValue
+        let otherId = otherUserId?.intValue ?? caredId
+        let fallbackName = displayName ?? otherUserName ?? "种子\(otherId)"
+        return CareRelationItem(
+            careId: careId.intValue,
+            guardianUserId: guardianId,
+            guardianUserName: guardianUserName,
+            caredUserId: caredId,
+            caredUserName: caredUserName,
+            otherUserId: otherId,
+            otherUserName: otherUserName,
+            remark: remark ?? "",
+            displayName: fallbackName,
+            permissionLevel: permissionLevel.intValue,
+            permissionName: permissionName ?? CarePermission.from(permissionLevel.intValue).title,
+            status: status.intValue,
+            statusName: statusName ?? "等待同意",
+            rejectReason: rejectReason ?? "",
+            requesterUserId: requesterUserId.intValue,
+            isRequester: (isRequester?.intValue ?? 0) == 1,
+            canUpdatePermission: (canUpdatePermission?.intValue ?? 0) == 1,
+            canRespond: (canRespond?.intValue ?? 0) == 1,
+            createdAt: createdAt
+        )
+    }
+}
+
 private struct ServerMonthSummary: Decodable {
     let monthNum: LossyInt
     let totalCount: LossyInt
@@ -617,12 +899,12 @@ private final class ContentViewModel: ObservableObject {
 
     private let remoteService = RemoteBehaviorService.shared
 
-    func loadAll(userId: Int) async {
+    func loadAll(userId: Int, subjectUserId: Int? = nil) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            let counts = try await remoteService.fetchTodayCounts(userId: userId)
+            let counts = try await remoteService.fetchTodayCounts(userId: userId, subjectUserId: subjectUserId)
             todayCounts = counts
             behaviors = counts.map(\.behavior)
             didLoadInitialData = true
@@ -632,16 +914,16 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
-    func record(_ behavior: BehaviorItem, userId: Int) async {
+    func record(_ behavior: BehaviorItem, userId: Int, subjectUserId: Int? = nil) async {
         do {
-            try await remoteService.insertRecord(userId: userId, behavior: behavior)
-            await loadAll(userId: userId)
+            try await remoteService.insertRecord(userId: userId, behavior: behavior, subjectUserId: subjectUserId)
+            await loadAll(userId: userId, subjectUserId: subjectUserId)
         } catch {
             addBehaviorErrorMessage = readableMessage(prefix: "记录失败", error: error)
         }
     }
 
-    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind) async -> Bool {
+    func addBehavior(userId: Int, subjectUserId: Int? = nil, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -661,10 +943,11 @@ private final class ContentViewModel: ObservableObject {
                 name: trimmedName,
                 detail: trimmedDetail,
                 colorHex: colorHex,
-                behaviorKind: behaviorKind
+                behaviorKind: behaviorKind,
+                subjectUserId: subjectUserId
             )
             addBehaviorErrorMessage = nil
-            await loadAll(userId: userId)
+            await loadAll(userId: userId, subjectUserId: subjectUserId)
             return true
         } catch {
             addBehaviorErrorMessage = readableMessage(prefix: "保存失败", error: error)
@@ -672,7 +955,7 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
-    func updateBehavior(_ behavior: BehaviorItem, userId: Int, name: String, detail: String, colorHex: String) async -> Bool {
+    func updateBehavior(_ behavior: BehaviorItem, userId: Int, subjectUserId: Int? = nil, name: String, detail: String, colorHex: String) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -692,10 +975,11 @@ private final class ContentViewModel: ObservableObject {
                 behavior: behavior,
                 name: trimmedName,
                 detail: trimmedDetail,
-                colorHex: colorHex
+                colorHex: colorHex,
+                subjectUserId: subjectUserId
             )
             addBehaviorErrorMessage = nil
-            await loadAll(userId: userId)
+            await loadAll(userId: userId, subjectUserId: subjectUserId)
             return true
         } catch {
             addBehaviorErrorMessage = readableMessage(prefix: "保存失败", error: error)
@@ -703,7 +987,7 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
-    func moveBehavior(from sourceIndex: Int, to destinationIndex: Int, userId: Int) async {
+    func moveBehavior(from sourceIndex: Int, to destinationIndex: Int, userId: Int, subjectUserId: Int? = nil) async {
         guard behaviors.indices.contains(sourceIndex), behaviors.indices.contains(destinationIndex), sourceIndex != destinationIndex else {
             return
         }
@@ -722,7 +1006,7 @@ private final class ContentViewModel: ObservableObject {
         }
 
         do {
-            try await remoteService.updateBehaviorSort(userId: userId, behaviors: movedBehaviors)
+            try await remoteService.updateBehaviorSort(userId: userId, behaviors: movedBehaviors, subjectUserId: subjectUserId)
             addBehaviorErrorMessage = nil
         } catch {
             behaviors = originalBehaviors
@@ -731,10 +1015,10 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
-    func deleteBehavior(_ behavior: BehaviorItem, userId: Int) async {
+    func deleteBehavior(_ behavior: BehaviorItem, userId: Int, subjectUserId: Int? = nil) async {
         do {
-            try await remoteService.deleteBehavior(userId: userId, behavior: behavior)
-            await loadAll(userId: userId)
+            try await remoteService.deleteBehavior(userId: userId, behavior: behavior, subjectUserId: subjectUserId)
+            await loadAll(userId: userId, subjectUserId: subjectUserId)
         } catch {
             addBehaviorErrorMessage = readableMessage(prefix: "删除失败", error: error)
         }
@@ -760,10 +1044,14 @@ private final class BehaviorYearViewModel: ObservableObject {
     @Published var monthSummaries: [MonthSummary] = []
 
     private let behavior: BehaviorItem
+    private let actorUserId: Int?
+    private let subjectUserId: Int?
     private let remoteService = RemoteBehaviorService.shared
 
-    init(behavior: BehaviorItem) {
+    init(behavior: BehaviorItem, actorUserId: Int? = nil, subjectUserId: Int? = nil) {
         self.behavior = behavior
+        self.actorUserId = actorUserId
+        self.subjectUserId = subjectUserId
     }
 
     var totalCount: Int {
@@ -772,7 +1060,12 @@ private final class BehaviorYearViewModel: ObservableObject {
 
     func load(year: Int) async {
         do {
-            monthSummaries = try await remoteService.fetchMonthSummaries(behavior: behavior, year: year)
+            monthSummaries = try await remoteService.fetchMonthSummaries(
+                behavior: behavior,
+                year: year,
+                userId: actorUserId,
+                subjectUserId: subjectUserId
+            )
         } catch {
             monthSummaries = (1...12).map { MonthSummary(month: $0, count: 0) }
         }
@@ -784,10 +1077,14 @@ private final class BehaviorMonthViewModel: ObservableObject {
     @Published var daySummaries: [DaySummary] = []
 
     private let behavior: BehaviorItem
+    private let actorUserId: Int?
+    private let subjectUserId: Int?
     private let remoteService = RemoteBehaviorService.shared
 
-    init(behavior: BehaviorItem) {
+    init(behavior: BehaviorItem, actorUserId: Int? = nil, subjectUserId: Int? = nil) {
         self.behavior = behavior
+        self.actorUserId = actorUserId
+        self.subjectUserId = subjectUserId
     }
 
     var totalCount: Int {
@@ -796,7 +1093,13 @@ private final class BehaviorMonthViewModel: ObservableObject {
 
     func load(year: Int, month: Int) async {
         do {
-            daySummaries = try await remoteService.fetchDaySummaries(behavior: behavior, year: year, month: month)
+            daySummaries = try await remoteService.fetchDaySummaries(
+                behavior: behavior,
+                year: year,
+                month: month,
+                userId: actorUserId,
+                subjectUserId: subjectUserId
+            )
         } catch {
             daySummaries = []
         }
@@ -811,10 +1114,14 @@ private final class BehaviorDayViewModel: ObservableObject {
     @Published var recordErrorMessage: String?
 
     private let behavior: BehaviorItem
+    private let actorUserId: Int?
+    private let subjectUserId: Int?
     private let remoteService = RemoteBehaviorService.shared
 
-    init(behavior: BehaviorItem) {
+    init(behavior: BehaviorItem, actorUserId: Int? = nil, subjectUserId: Int? = nil) {
         self.behavior = behavior
+        self.actorUserId = actorUserId
+        self.subjectUserId = subjectUserId
     }
 
     var totalCount: Int {
@@ -823,7 +1130,12 @@ private final class BehaviorDayViewModel: ObservableObject {
 
     func load(date: Date) async {
         do {
-            hourSummaries = try await remoteService.fetchHourSummaries(behavior: behavior, date: date)
+            hourSummaries = try await remoteService.fetchHourSummaries(
+                behavior: behavior,
+                date: date,
+                userId: actorUserId,
+                subjectUserId: subjectUserId
+            )
         } catch {
             hourSummaries = (0...23).map { HourSummary(hour: $0, count: 0) }
         }
@@ -839,7 +1151,8 @@ private final class BehaviorDayViewModel: ObservableObject {
                 userId: userId,
                 behavior: behavior,
                 date: date,
-                hour: hour
+                hour: hour,
+                subjectUserId: subjectUserId
             )
             recordErrorMessage = nil
         } catch {
@@ -850,7 +1163,7 @@ private final class BehaviorDayViewModel: ObservableObject {
 
     func deleteRecord(_ record: BehaviorRecordItem, userId: Int, date: Date, hour: Int) async -> Bool {
         do {
-            try await remoteService.deleteBehaviorRecord(userId: userId, record: record)
+            try await remoteService.deleteBehaviorRecord(userId: userId, record: record, subjectUserId: subjectUserId)
             await load(date: date)
             await loadHourRecords(userId: userId, date: date, hour: hour)
             recordErrorMessage = nil
@@ -866,6 +1179,10 @@ private final class BehaviorDayViewModel: ObservableObject {
 struct ContentView: View {
     @EnvironmentObject private var session: SessionStore
 
+    let subjectUserId: Int?
+    let subjectName: String?
+    let subjectPermissionLevel: Int
+
     @StateObject private var viewModel = ContentViewModel()
     @State private var pendingBehavior: BehaviorItem?
     @State private var isPresentingAddBehavior = false
@@ -875,6 +1192,24 @@ struct ContentView: View {
 
     private var currentUserId: Int? {
         session.user?.userId
+    }
+
+    private var activeSubjectUserId: Int? {
+        subjectUserId
+    }
+
+    private var isSubjectMode: Bool {
+        subjectUserId != nil
+    }
+
+    private var canManageSubject: Bool {
+        !isSubjectMode || subjectPermissionLevel >= 2
+    }
+
+    init(subjectUserId: Int? = nil, subjectName: String? = nil, subjectPermissionLevel: Int = 0) {
+        self.subjectUserId = subjectUserId
+        self.subjectName = subjectName
+        self.subjectPermissionLevel = subjectPermissionLevel
     }
 
     private let dateText: String = {
@@ -888,12 +1223,12 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             homeBody
-            .navigationTitle("芽记")
+            .navigationTitle(subjectName ?? "芽记")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
-            .task(id: currentUserId) {
+            .task(id: "\(currentUserId ?? 0)-\(activeSubjectUserId ?? 0)") {
                 if let currentUserId {
-                    await viewModel.loadAll(userId: currentUserId)
+                    await viewModel.loadAll(userId: currentUserId, subjectUserId: activeSubjectUserId)
                 }
             }
             .modifier(homePresentationModifier)
@@ -909,8 +1244,13 @@ struct ContentView: View {
         if viewModel.didLoadInitialData {
             HomeContentView(
                 dateText: dateText,
+                heroTitle: isSubjectMode ? "今日呵护记录" : "今日习惯记录",
+                heroTip: isSubjectMode && !canManageSubject ? "当前权限仅可查看" : nil,
                 behaviors: viewModel.behaviors,
                 todayCounts: viewModel.todayCounts,
+                actorUserId: currentUserId,
+                subjectUserId: activeSubjectUserId,
+                canManageSubject: canManageSubject,
                 onBehaviorTap: beginRecord,
                 onBehaviorLongPress: beginBehaviorAction,
                 onBehaviorMove: moveBehavior
@@ -931,6 +1271,7 @@ struct ContentView: View {
             } label: {
                 Image(systemName: "plus")
             }
+            .disabled(!canManageSubject)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
@@ -947,6 +1288,7 @@ struct ContentView: View {
         HomePresentationModifier(
             viewModel: viewModel,
             userId: currentUserId,
+            subjectUserId: activeSubjectUserId,
             isPresentingAddBehavior: $isPresentingAddBehavior,
             behaviorPendingEditing: $behaviorPendingEditing,
             pendingBehavior: $pendingBehavior,
@@ -956,10 +1298,18 @@ struct ContentView: View {
     }
 
     private func beginRecord(_ behavior: BehaviorItem) {
+        guard canManageSubject else {
+            viewModel.addBehaviorErrorMessage = "当前只能查看，不能记录"
+            return
+        }
         pendingBehavior = behavior
     }
 
     private func beginBehaviorAction(_ behavior: BehaviorItem) {
+        guard canManageSubject else {
+            viewModel.addBehaviorErrorMessage = "当前只能查看，不能编辑习惯"
+            return
+        }
         pendingBehavior = nil
         isPresentingAddBehavior = false
         if behaviorPendingDeletion == nil {
@@ -968,12 +1318,16 @@ struct ContentView: View {
     }
 
     private func moveBehavior(from sourceIndex: Int, to destinationIndex: Int) {
+        guard canManageSubject else {
+            viewModel.addBehaviorErrorMessage = "当前只能查看，不能调整习惯顺序"
+            return
+        }
         guard let currentUserId else {
             return
         }
 
         Task {
-            await viewModel.moveBehavior(from: sourceIndex, to: destinationIndex, userId: currentUserId)
+            await viewModel.moveBehavior(from: sourceIndex, to: destinationIndex, userId: currentUserId, subjectUserId: activeSubjectUserId)
         }
     }
 
@@ -983,7 +1337,7 @@ struct ContentView: View {
         }
 
         Task {
-            await viewModel.loadAll(userId: currentUserId)
+            await viewModel.loadAll(userId: currentUserId, subjectUserId: activeSubjectUserId)
         }
     }
 }
@@ -1036,8 +1390,13 @@ private struct HomeLoadingView: View {
 // 首页主体滚动内容。
 private struct HomeContentView: View {
     let dateText: String
+    let heroTitle: String
+    let heroTip: String?
     let behaviors: [BehaviorItem]
     let todayCounts: [DailyBehaviorCount]
+    let actorUserId: Int?
+    let subjectUserId: Int?
+    let canManageSubject: Bool
     let onBehaviorTap: (BehaviorItem) -> Void
     let onBehaviorLongPress: (BehaviorItem) -> Void
     let onBehaviorMove: (Int, Int) -> Void
@@ -1048,7 +1407,7 @@ private struct HomeContentView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
-                HomeHeaderView(dateText: dateText)
+                HomeHeaderView(dateText: dateText, title: heroTitle, tip: heroTip)
                 behaviorButtonList
                 todayCountList
             }
@@ -1101,7 +1460,12 @@ private struct HomeContentView: View {
 
             ForEach(todayCounts) { item in
                 NavigationLink {
-                    BehaviorYearDetailView(behavior: item.behavior)
+                    BehaviorYearDetailView(
+                        behavior: item.behavior,
+                        actorUserId: actorUserId,
+                        subjectUserId: subjectUserId,
+                        canManageSubject: canManageSubject
+                    )
                 } label: {
                     TodayCountRow(item: item)
                 }
@@ -1116,6 +1480,7 @@ private struct HomeContentView: View {
 private struct HomePresentationModifier: ViewModifier {
     @ObservedObject var viewModel: ContentViewModel
     let userId: Int?
+    let subjectUserId: Int?
 
     @Binding var isPresentingAddBehavior: Bool
     @Binding var behaviorPendingEditing: BehaviorItem?
@@ -1126,10 +1491,10 @@ private struct HomePresentationModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .sheet(isPresented: $isPresentingAddBehavior) {
-                AddBehaviorView(viewModel: viewModel, userId: userId)
+                AddBehaviorView(viewModel: viewModel, userId: userId, subjectUserId: subjectUserId)
             }
             .sheet(item: $behaviorPendingEditing) { behavior in
-                AddBehaviorView(viewModel: viewModel, userId: userId, editingBehavior: behavior)
+                AddBehaviorView(viewModel: viewModel, userId: userId, subjectUserId: subjectUserId, editingBehavior: behavior)
             }
             .overlay {
                 if let behavior = pendingBehavior {
@@ -1221,7 +1586,7 @@ private struct HomePresentationModifier: ViewModifier {
     private func confirmRecord(_ behavior: BehaviorItem) {
         if let userId {
             Task {
-                await viewModel.record(behavior, userId: userId)
+                await viewModel.record(behavior, userId: userId, subjectUserId: subjectUserId)
             }
         }
         pendingBehavior = nil
@@ -1230,7 +1595,7 @@ private struct HomePresentationModifier: ViewModifier {
     private func confirmDelete(_ behavior: BehaviorItem) {
         if let userId {
             Task {
-                await viewModel.deleteBehavior(behavior, userId: userId)
+                await viewModel.deleteBehavior(behavior, userId: userId, subjectUserId: subjectUserId)
             }
         }
         behaviorPendingDeletion = nil
@@ -1348,14 +1713,25 @@ private struct BadUpDialog: View {
 // 首页标题区。
 private struct HomeHeaderView: View {
     let dateText: String
+    let title: String
+    let tip: String?
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("今日习惯记录")
+            Text(title)
                 .font(.largeTitle.bold())
             Text(dateText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+            if let tip {
+                Text(tip)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.12, green: 0.49, blue: 0.36))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color(red: 0.86, green: 0.94, blue: 0.90))
+                    .clipShape(Capsule())
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -1655,6 +2031,11 @@ private struct MoreView: View {
                 Section("种子信息") {
                     InfoRow(title: "种子编号", value: user.map { String($0.userId) } ?? "-")
                     NavigationLink {
+                        CareRelationView(user: user)
+                    } label: {
+                        InfoRow(title: "呵护关系", value: "管理关系")
+                    }
+                    NavigationLink {
                         GrowthIndexView(index: behaviorScore ?? 0)
                     } label: {
                         InfoRow(
@@ -1777,6 +2158,770 @@ private struct MoreView: View {
         } catch {
             behaviorScore = nil
             scoreLoadError = error.localizedDescription
+        }
+    }
+}
+
+@MainActor
+private final class CareRelationViewModel: ObservableObject {
+    @Published var careAsGuardian: [CareRelationItem] = []
+    @Published var careAsCared: [CareRelationItem] = []
+    @Published var isLoading = false
+    @Published var errorMessage: String?
+
+    private let remoteService = RemoteBehaviorService.shared
+
+    func load(userId: Int) async {
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let result = try await remoteService.fetchCareList(userId: userId)
+            careAsGuardian = result.careAsGuardian
+            careAsCared = result.careAsCared
+            errorMessage = nil
+        } catch {
+            errorMessage = "加载失败：\(error.localizedDescription)"
+        }
+    }
+
+    func requestCare(userId: Int, careCode: String, permission: CarePermission) async -> Bool {
+        do {
+            try await remoteService.requestCare(userId: userId, careCode: careCode, permission: permission)
+            await load(userId: userId)
+            return true
+        } catch {
+            errorMessage = "申请失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func acceptCare(userId: Int, careId: Int) async {
+        do {
+            try await remoteService.respondCare(userId: userId, careId: careId, action: "accept")
+            await load(userId: userId)
+        } catch {
+            errorMessage = "处理失败：\(error.localizedDescription)"
+        }
+    }
+
+    func rejectCare(userId: Int, careId: Int, reason: String) async -> Bool {
+        do {
+            try await remoteService.respondCare(userId: userId, careId: careId, action: "reject", rejectReason: reason)
+            await load(userId: userId)
+            return true
+        } catch {
+            errorMessage = "处理失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func updateRemark(userId: Int, careId: Int, remark: String) async -> Bool {
+        do {
+            try await remoteService.updateCareRemark(userId: userId, careId: careId, remark: remark)
+            await load(userId: userId)
+            return true
+        } catch {
+            errorMessage = "保存失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func updatePermission(userId: Int, careId: Int, permission: CarePermission) async -> Bool {
+        do {
+            try await remoteService.updateCarePermission(userId: userId, careId: careId, permission: permission)
+            await load(userId: userId)
+            return true
+        } catch {
+            errorMessage = "保存失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func rerequestCare(userId: Int, careId: Int, permission: CarePermission) async -> Bool {
+        do {
+            try await remoteService.rerequestCare(userId: userId, careId: careId, permission: permission)
+            await load(userId: userId)
+            return true
+        } catch {
+            errorMessage = "再请求失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func deleteCare(userId: Int, careId: Int) async -> Bool {
+        do {
+            try await remoteService.deleteCare(userId: userId, careId: careId)
+            await load(userId: userId)
+            return true
+        } catch {
+            errorMessage = "删除失败：\(error.localizedDescription)"
+            return false
+        }
+    }
+}
+
+private struct CareRelationView: View {
+    let user: BadUpUser?
+
+    @StateObject private var viewModel = CareRelationViewModel()
+    @State private var careCodeInput = ""
+    @State private var selectedPermission: CarePermission = .low
+    @State private var copiedCareCode = false
+    @State private var remarkEditor: CareTextEditorState?
+    @State private var rejectEditor: CareTextEditorState?
+    @State private var permissionEditor: CarePermissionEditorState?
+    @State private var relationPendingDeletion: CareRelationItem?
+
+    private var userId: Int? {
+        user?.userId
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 16) {
+                careCodeCard
+                requestCard
+                relationSection(title: "呵护我的", emptyText: "还没有人呵护你。", mode: .cared, items: viewModel.careAsCared)
+                relationSection(title: "我呵护的", emptyText: "还没有你呵护的人。", mode: .guardian, items: viewModel.careAsGuardian)
+            }
+            .padding()
+            .foregroundStyle(CareTheme.ink)
+        }
+        .background(CareTheme.page)
+        .navigationTitle("呵护关系")
+        .navigationBarTitleDisplayMode(.inline)
+        .overlay {
+            if viewModel.isLoading && viewModel.careAsGuardian.isEmpty && viewModel.careAsCared.isEmpty {
+                ProgressView()
+                    .tint(CareTheme.green)
+                    .padding(18)
+                    .background(CareTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.08), radius: 18, x: 0, y: 8)
+            }
+        }
+        .task(id: userId) {
+            if let userId {
+                await viewModel.load(userId: userId)
+            }
+        }
+        .refreshable {
+            if let userId {
+                await viewModel.load(userId: userId)
+            }
+        }
+        .alert("已复制", isPresented: $copiedCareCode) {
+            Button("知道了", role: .cancel) {}
+        } message: {
+            Text("呵护码已复制")
+        }
+        .alert(
+            "提示",
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.errorMessage = nil
+                    }
+                }
+            )
+        ) {
+            Button("知道了", role: .cancel) {
+                viewModel.errorMessage = nil
+            }
+        } message: {
+            Text(viewModel.errorMessage ?? "")
+        }
+        .alert(
+            "删除呵护关系",
+            isPresented: Binding(
+                get: { relationPendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        relationPendingDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button("取消", role: .cancel) {
+                relationPendingDeletion = nil
+            }
+            Button("删除", role: .destructive) {
+                if let relation = relationPendingDeletion {
+                    deleteCare(relation)
+                }
+            }
+        } message: {
+            Text("只删除这条呵护关系，不会删除习惯和记录；如果双方互相呵护，另一条反向关系不会受影响。")
+        }
+        .sheet(item: $remarkEditor) { editor in
+            CareTextEditSheet(
+                title: "呵护备注",
+                placeholder: "输入备注名称",
+                initialText: editor.text,
+                requiresText: false,
+                onCancel: { remarkEditor = nil },
+                onSave: { text in
+                    saveRemark(editor, text: text)
+                }
+            )
+        }
+        .sheet(item: $rejectEditor) { editor in
+            CareTextEditSheet(
+                title: "拒绝原因",
+                placeholder: "请填写拒绝原因，会同步给对方看到",
+                initialText: editor.text,
+                requiresText: true,
+                onCancel: { rejectEditor = nil },
+                onSave: { text in
+                    saveReject(editor, reason: text)
+                }
+            )
+        }
+        .sheet(item: $permissionEditor) { editor in
+            CarePermissionEditSheet(
+                title: editor.title,
+                saveTitle: editor.saveTitle,
+                selectedPermission: editor.permission,
+                onCancel: { permissionEditor = nil },
+                onSave: { permission in
+                    savePermission(editor, permission: permission)
+                }
+            )
+        }
+    }
+
+    private var careCodeCard: some View {
+        Button {
+            copyCareCode()
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text("我的呵护码：")
+                        .font(.title3.weight(.heavy))
+                    Text(user?.careCode ?? "-")
+                        .font(.system(size: 30, weight: .heavy, design: .monospaced))
+                        .foregroundStyle(CareTheme.green)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    Image(systemName: "doc.on.doc")
+                        .foregroundStyle(CareTheme.green)
+                    Spacer()
+                }
+
+                Text("只把呵护码给信任的人，对方才能请求呵护你。")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(CareTheme.muted)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CareTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .shadow(color: Color.black.opacity(0.04), radius: 16, x: 0, y: 8)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var requestCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("请求对方呵护我")
+                .font(.headline)
+
+            TextField("输入对方 6 位呵护码", text: $careCodeInput)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .font(.headline.monospaced())
+                .foregroundStyle(CareTheme.ink)
+                .padding(14)
+                .background(CareTheme.row)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .onChange(of: careCodeInput) { _, newValue in
+                    careCodeInput = String(newValue.uppercased().prefix(6))
+                }
+
+            Text("呵护权限")
+                .font(.subheadline.weight(.bold))
+
+            VStack(spacing: 12) {
+                ForEach(CarePermission.allCases) { permission in
+                    CarePermissionButton(
+                        permission: permission,
+                        isSelected: selectedPermission == permission
+                    ) {
+                        selectedPermission = permission
+                    }
+                }
+            }
+
+            Button {
+                requestCare()
+            } label: {
+                Text("请求呵护")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(CareTheme.green)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(18)
+        .background(CareTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Color.black.opacity(0.04), radius: 16, x: 0, y: 8)
+    }
+
+    private func relationSection(title: String, emptyText: String, mode: CareRelationMode, items: [CareRelationItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+
+            if items.isEmpty {
+                EmptyCareStateView(text: emptyText)
+            } else {
+                ForEach(items) { item in
+                    CareRelationRow(
+                        item: item,
+                        mode: mode,
+                        currentUserId: user?.userId ?? 0,
+                        onAccept: { acceptCare(item) },
+                        onReject: { rejectEditor = CareTextEditorState(careId: item.careId, text: "") },
+                        onRemark: { remarkEditor = CareTextEditorState(careId: item.careId, text: item.remark) },
+                        onPermission: {
+                            permissionEditor = CarePermissionEditorState(
+                                careId: item.careId,
+                                permission: item.permission,
+                                mode: .update
+                            )
+                        },
+                        onRerequest: {
+                            permissionEditor = CarePermissionEditorState(
+                                careId: item.careId,
+                                permission: item.permission,
+                                mode: .rerequest
+                            )
+                        },
+                        onDelete: { relationPendingDeletion = item }
+                    )
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CareTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Color.black.opacity(0.04), radius: 16, x: 0, y: 8)
+    }
+
+    private func copyCareCode() {
+        guard let code = user?.careCode, !code.isEmpty else {
+            viewModel.errorMessage = "呵护码暂不可用，请重新打开 App"
+            return
+        }
+        UIPasteboard.general.string = code
+        copiedCareCode = true
+    }
+
+    private func requestCare() {
+        guard let userId else {
+            viewModel.errorMessage = "用户信息异常，请重新打开 App"
+            return
+        }
+        let code = careCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard code.range(of: #"^[0-9A-Z]{6}$"#, options: .regularExpression) != nil else {
+            viewModel.errorMessage = "请输入 6 位呵护码"
+            return
+        }
+        Task {
+            let success = await viewModel.requestCare(userId: userId, careCode: code, permission: selectedPermission)
+            if success {
+                careCodeInput = ""
+            }
+        }
+    }
+
+    private func acceptCare(_ item: CareRelationItem) {
+        guard let userId else { return }
+        Task {
+            await viewModel.acceptCare(userId: userId, careId: item.careId)
+        }
+    }
+
+    private func saveRemark(_ editor: CareTextEditorState, text: String) {
+        guard let userId else { return }
+        Task {
+            let success = await viewModel.updateRemark(userId: userId, careId: editor.careId, remark: text)
+            if success {
+                remarkEditor = nil
+            }
+        }
+    }
+
+    private func saveReject(_ editor: CareTextEditorState, reason: String) {
+        guard let userId else { return }
+        Task {
+            let success = await viewModel.rejectCare(userId: userId, careId: editor.careId, reason: reason)
+            if success {
+                rejectEditor = nil
+            }
+        }
+    }
+
+    private func savePermission(_ editor: CarePermissionEditorState, permission: CarePermission) {
+        guard let userId else { return }
+        Task {
+            let success: Bool
+            switch editor.mode {
+            case .update:
+                success = await viewModel.updatePermission(userId: userId, careId: editor.careId, permission: permission)
+            case .rerequest:
+                success = await viewModel.rerequestCare(userId: userId, careId: editor.careId, permission: permission)
+            }
+            if success {
+                permissionEditor = nil
+            }
+        }
+    }
+
+    private func deleteCare(_ item: CareRelationItem) {
+        guard let userId else { return }
+        Task {
+            let success = await viewModel.deleteCare(userId: userId, careId: item.careId)
+            if success {
+                relationPendingDeletion = nil
+            }
+        }
+    }
+}
+
+private struct CareRelationRow: View {
+    let item: CareRelationItem
+    let mode: CareRelationMode
+    let currentUserId: Int
+    let onAccept: () -> Void
+    let onReject: () -> Void
+    let onRemark: () -> Void
+    let onPermission: () -> Void
+    let onRerequest: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                CareAvatarPlaceholder()
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(item.relationText(mode: mode, currentUserId: currentUserId))
+                        .font(.headline)
+                        .foregroundStyle(CareTheme.ink)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text("种子ID \(mode == .guardian ? item.caredUserId : item.guardianUserId) · \(item.permissionName)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(CareTheme.muted)
+
+                    if !item.rejectReason.isEmpty {
+                        Text("原因：\(item.rejectReason)")
+                            .font(.caption)
+                            .foregroundStyle(CareTheme.danger)
+                    }
+                }
+
+                Spacer()
+            }
+
+            actionRow
+        }
+        .padding(14)
+        .background(CareTheme.row)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var actionRow: some View {
+        if item.canRespond {
+            HStack(spacing: 10) {
+                Button("拒绝", role: .destructive) {
+                    onReject()
+                }
+                .buttonStyle(.bordered)
+
+                Button("同意") {
+                    onAccept()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(CareTheme.green)
+
+                if item.isRequester {
+                    Button("删除", role: .destructive) {
+                        onDelete()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        } else if item.status == 1 {
+            HStack(spacing: 10) {
+                if mode == .guardian {
+                    NavigationLink {
+                        ContentView(
+                            subjectUserId: item.caredUserId,
+                            subjectName: item.displayName,
+                            subjectPermissionLevel: item.permissionLevel
+                        )
+                    } label: {
+                        Text(item.permissionLevel >= 2 ? "查看/管理" : "查看")
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                if item.canUpdatePermission {
+                    Button("改权限") {
+                        onPermission()
+                    }
+                    .buttonStyle(.bordered)
+                }
+
+                Button("改备注") {
+                    onRemark()
+                }
+                .buttonStyle(.bordered)
+
+                if item.isRequester {
+                    Button("删除", role: .destructive) {
+                        onDelete()
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .font(.footnote.weight(.semibold))
+        } else if item.isRequester {
+            HStack(spacing: 10) {
+                if item.status == 2 {
+                    Button("再请求") {
+                        onRerequest()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(CareTheme.green)
+                }
+
+                Button("删除", role: .destructive) {
+                    onDelete()
+                }
+                .buttonStyle(.bordered)
+            }
+            .font(.footnote.weight(.semibold))
+        }
+    }
+}
+
+private struct CarePermissionButton: View {
+    let permission: CarePermission
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(CareTheme.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(permission.title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(CareTheme.ink)
+                    Text(permission.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(CareTheme.muted)
+                }
+                Spacer()
+            }
+            .padding(12)
+            .background(isSelected ? CareTheme.softGreen : CareTheme.row)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? Color(red: 0.25, green: 0.78, blue: 0.48) : Color.clear, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct CareAvatarPlaceholder: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.93, green: 0.98, blue: 0.95),
+                            Color(red: 0.82, green: 0.94, blue: 0.86)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Image(systemName: "leaf.fill")
+                .foregroundStyle(Color(red: 0.34, green: 0.70, blue: 0.46).opacity(0.72))
+                .rotationEffect(.degrees(-18))
+        }
+        .frame(width: 44, height: 44)
+    }
+}
+
+private struct EmptyCareStateView: View {
+    let text: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "shippingbox")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(Color(red: 0.65, green: 0.75, blue: 0.70))
+            Text(text)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(CareTheme.muted)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+    }
+}
+
+private struct CareTextEditorState: Identifiable {
+    let id = UUID()
+    let careId: Int
+    let text: String
+}
+
+private enum CarePermissionEditorMode {
+    case update
+    case rerequest
+}
+
+private struct CarePermissionEditorState: Identifiable {
+    let id = UUID()
+    let careId: Int
+    let permission: CarePermission
+    let mode: CarePermissionEditorMode
+
+    var title: String {
+        switch mode {
+        case .update:
+            return "修改呵护权限"
+        case .rerequest:
+            return "再次请求呵护"
+        }
+    }
+
+    var saveTitle: String {
+        switch mode {
+        case .update:
+            return "保存"
+        case .rerequest:
+            return "再请求"
+        }
+    }
+}
+
+private struct CareTextEditSheet: View {
+    let title: String
+    let placeholder: String
+    let initialText: String
+    let requiresText: Bool
+    let onCancel: () -> Void
+    let onSave: (String) -> Void
+
+    @State private var text: String
+
+    init(
+        title: String,
+        placeholder: String,
+        initialText: String,
+        requiresText: Bool,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (String) -> Void
+    ) {
+        self.title = title
+        self.placeholder = placeholder
+        self.initialText = initialText
+        self.requiresText = requiresText
+        self.onCancel = onCancel
+        self.onSave = onSave
+        _text = State(initialValue: initialText)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField(placeholder, text: $text, axis: .vertical)
+                    .lineLimit(3...5)
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("保存") {
+                        onSave(text.trimmingCharacters(in: .whitespacesAndNewlines))
+                    }
+                    .disabled(requiresText && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+}
+
+private struct CarePermissionEditSheet: View {
+    @State private var selectedPermission: CarePermission
+    let title: String
+    let saveTitle: String
+    let onCancel: () -> Void
+    let onSave: (CarePermission) -> Void
+
+    init(
+        title: String = "修改呵护权限",
+        saveTitle: String = "保存",
+        selectedPermission: CarePermission,
+        onCancel: @escaping () -> Void,
+        onSave: @escaping (CarePermission) -> Void
+    ) {
+        _selectedPermission = State(initialValue: selectedPermission)
+        self.title = title
+        self.saveTitle = saveTitle
+        self.onCancel = onCancel
+        self.onSave = onSave
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 12) {
+                ForEach(CarePermission.allCases) { permission in
+                    CarePermissionButton(permission: permission, isSelected: selectedPermission == permission) {
+                        selectedPermission = permission
+                    }
+                }
+                Spacer()
+            }
+            .padding()
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(saveTitle) {
+                        onSave(selectedPermission)
+                    }
+                }
+            }
         }
     }
 }
@@ -2360,6 +3505,7 @@ private struct AddBehaviorView: View {
 
     @ObservedObject var viewModel: ContentViewModel
     let userId: Int?
+    let subjectUserId: Int?
     let editingBehavior: BehaviorItem?
 
     @State private var name = ""
@@ -2384,9 +3530,10 @@ private struct AddBehaviorView: View {
         selectedPaletteHex ?? selectedColor.rawValue
     }
 
-    init(viewModel: ContentViewModel, userId: Int?, editingBehavior: BehaviorItem? = nil) {
+    init(viewModel: ContentViewModel, userId: Int?, subjectUserId: Int? = nil, editingBehavior: BehaviorItem? = nil) {
         self.viewModel = viewModel
         self.userId = userId
+        self.subjectUserId = subjectUserId
         self.editingBehavior = editingBehavior
 
         _name = State(initialValue: editingBehavior?.name ?? "")
@@ -2460,6 +3607,7 @@ private struct AddBehaviorView: View {
                                 success = await viewModel.updateBehavior(
                                     editingBehavior,
                                     userId: userId,
+                                    subjectUserId: subjectUserId,
                                     name: name,
                                     detail: detail,
                                     colorHex: selectedColorHex
@@ -2467,6 +3615,7 @@ private struct AddBehaviorView: View {
                             } else {
                                 success = await viewModel.addBehavior(
                                     userId: userId,
+                                    subjectUserId: subjectUserId,
                                     name: name,
                                     detail: detail,
                                     colorHex: selectedColorHex,
@@ -2695,15 +3844,27 @@ private struct BehaviorYearDetailView: View {
     @EnvironmentObject private var session: SessionStore
 
     let behavior: BehaviorItem
+    let actorUserId: Int?
+    let subjectUserId: Int?
+    let canManageSubject: Bool
 
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
     @StateObject private var viewModel: BehaviorYearViewModel
     @State private var hasCompletedInitialLoad = false
     @State private var handledRecordChangeToken = 0
 
-    init(behavior: BehaviorItem) {
+    init(behavior: BehaviorItem, actorUserId: Int? = nil, subjectUserId: Int? = nil, canManageSubject: Bool = true) {
         self.behavior = behavior
-        _viewModel = StateObject(wrappedValue: BehaviorYearViewModel(behavior: behavior))
+        self.actorUserId = actorUserId
+        self.subjectUserId = subjectUserId
+        self.canManageSubject = canManageSubject
+        _viewModel = StateObject(
+            wrappedValue: BehaviorYearViewModel(
+                behavior: behavior,
+                actorUserId: actorUserId,
+                subjectUserId: subjectUserId
+            )
+        )
     }
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: 3)
@@ -2755,7 +3916,10 @@ private struct BehaviorYearDetailView: View {
                             BehaviorMonthDetailView(
                                 behavior: behavior,
                                 year: selectedYear,
-                                month: summary.month
+                                month: summary.month,
+                                actorUserId: actorUserId,
+                                subjectUserId: subjectUserId,
+                                canManageSubject: canManageSubject
                             )
                         } label: {
                             MonthCardView(behavior: behavior, summary: summary)
@@ -2805,6 +3969,9 @@ private struct BehaviorMonthDetailView: View {
     let behavior: BehaviorItem
     let year: Int
     let month: Int
+    let actorUserId: Int?
+    let subjectUserId: Int?
+    let canManageSubject: Bool
 
     @StateObject private var viewModel: BehaviorMonthViewModel
     @State private var hasCompletedInitialLoad = false
@@ -2820,12 +3987,19 @@ private struct BehaviorMonthDetailView: View {
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
     private let weekdayTitles = ["日", "一", "二", "三", "四", "五", "六"]
 
-    init(behavior: BehaviorItem, year: Int, month: Int) {
+    init(behavior: BehaviorItem, year: Int, month: Int, actorUserId: Int? = nil, subjectUserId: Int? = nil, canManageSubject: Bool = true) {
         self.behavior = behavior
         self.year = year
         self.month = month
+        self.actorUserId = actorUserId
+        self.subjectUserId = subjectUserId
+        self.canManageSubject = canManageSubject
         _viewModel = StateObject(
-            wrappedValue: BehaviorMonthViewModel(behavior: behavior)
+            wrappedValue: BehaviorMonthViewModel(
+                behavior: behavior,
+                actorUserId: actorUserId,
+                subjectUserId: subjectUserId
+            )
         )
     }
 
@@ -2864,7 +4038,13 @@ private struct BehaviorMonthDetailView: View {
 
                     ForEach(viewModel.daySummaries) { summary in
                         NavigationLink {
-                            BehaviorDayDetailView(behavior: behavior, date: summary.date)
+                            BehaviorDayDetailView(
+                                behavior: behavior,
+                                date: summary.date,
+                                actorUserId: actorUserId,
+                                subjectUserId: subjectUserId,
+                                canManageSubject: canManageSubject
+                            )
                         } label: {
                             DayCellView(
                                 behavior: behavior,
@@ -2915,6 +4095,9 @@ private struct BehaviorDayDetailView: View {
 
     let behavior: BehaviorItem
     let date: Date
+    let actorUserId: Int?
+    let subjectUserId: Int?
+    let canManageSubject: Bool
 
     @StateObject private var viewModel: BehaviorDayViewModel
     @State private var selectedHour: HourSummary?
@@ -2926,10 +4109,19 @@ private struct BehaviorDayDetailView: View {
         return calendar
     }()
 
-    init(behavior: BehaviorItem, date: Date) {
+    init(behavior: BehaviorItem, date: Date, actorUserId: Int? = nil, subjectUserId: Int? = nil, canManageSubject: Bool = true) {
         self.behavior = behavior
         self.date = date
-        _viewModel = StateObject(wrappedValue: BehaviorDayViewModel(behavior: behavior))
+        self.actorUserId = actorUserId
+        self.subjectUserId = subjectUserId
+        self.canManageSubject = canManageSubject
+        _viewModel = StateObject(
+            wrappedValue: BehaviorDayViewModel(
+                behavior: behavior,
+                actorUserId: actorUserId,
+                subjectUserId: subjectUserId
+            )
+        )
     }
 
     private var dayTitle: String {
@@ -3012,6 +4204,7 @@ private struct BehaviorDayDetailView: View {
                 summary: summary,
                 records: viewModel.hourRecords,
                 isLoading: viewModel.isLoadingHourRecords,
+                canDelete: canManageSubject,
                 onClose: {
                     selectedHour = nil
                 },
@@ -3040,7 +4233,7 @@ private struct BehaviorDayDetailView: View {
     }
 
     private func openHourRecords(_ summary: HourSummary) {
-        guard let userId = session.user?.userId else {
+        guard let userId = actorUserId ?? session.user?.userId else {
             viewModel.recordErrorMessage = "用户信息异常，请重新打开 App"
             return
         }
@@ -3052,7 +4245,11 @@ private struct BehaviorDayDetailView: View {
     }
 
     private func deleteRecord(_ record: BehaviorRecordItem) {
-        guard let userId = session.user?.userId else {
+        guard canManageSubject else {
+            viewModel.recordErrorMessage = "当前只能查看，不能删除记录"
+            return
+        }
+        guard let userId = actorUserId ?? session.user?.userId else {
             viewModel.recordErrorMessage = "用户信息异常，请重新打开 App"
             return
         }
@@ -3227,6 +4424,7 @@ private struct HourRecordsSheet: View {
     let summary: HourSummary
     let records: [BehaviorRecordItem]
     let isLoading: Bool
+    let canDelete: Bool
     let onClose: () -> Void
     let onDelete: (BehaviorRecordItem) -> Void
 
@@ -3262,6 +4460,7 @@ private struct HourRecordsSheet: View {
                                 HourRecordRow(
                                     behavior: behavior,
                                     record: record,
+                                    canDelete: canDelete,
                                     onDelete: {
                                         recordPendingDeletion = record
                                     }
@@ -3317,6 +4516,7 @@ private struct HourRecordsSheet: View {
 private struct HourRecordRow: View {
     let behavior: BehaviorItem
     let record: BehaviorRecordItem
+    let canDelete: Bool
     let onDelete: () -> Void
 
     var body: some View {
@@ -3339,17 +4539,19 @@ private struct HourRecordRow: View {
 
             Spacer()
 
-            Button(role: .destructive) {
-                onDelete()
-            } label: {
-                Text("删除")
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Color.red.opacity(0.10))
-                    .clipShape(Capsule())
+            if canDelete {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Text("删除")
+                        .font(.caption.weight(.semibold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(Color.red.opacity(0.10))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
     }

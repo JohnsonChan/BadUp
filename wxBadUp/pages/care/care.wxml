@@ -61,15 +61,16 @@
           </view>
           <view class="relation-main">
             <view class="relation-name">{{item.relationText}}</view>
-            <view class="relation-meta">用户ID {{item.guardianUserId}} · {{item.permissionName}}</view>
+            <view class="relation-meta">种子ID {{item.guardianUserId}} · {{item.permissionName}}</view>
             <view wx:if="{{item.rejectReason}}" class="reject-reason">原因：{{item.rejectReason}}</view>
           </view>
           <view class="relation-side">
-            <view class="status-badge {{item.statusClass}}">{{item.statusName}}</view>
             <block wx:if="{{item.status === 1}}">
               <button wx:if="{{item.canUpdatePermission}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openPermissionModal">改权限</button>
               <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="呵护备注" bindtap="openRemarkModal">改备注</button>
             </block>
+            <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openRerequestModal">再请求</button>
+            <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" bindtap="confirmDeleteCare">删除</button>
           </view>
         </view>
       </view>
@@ -97,11 +98,10 @@
           </view>
           <view class="relation-main">
             <view class="relation-name">{{item.relationText}}</view>
-            <view class="relation-meta">用户ID {{item.caredUserId}} · {{item.permissionName}}</view>
+            <view class="relation-meta">种子ID {{item.caredUserId}} · {{item.permissionName}}</view>
             <view wx:if="{{item.rejectReason}}" class="reject-reason">原因：{{item.rejectReason}}</view>
           </view>
           <view class="relation-side">
-            <view class="status-badge {{item.statusClass}}">{{item.statusName}}</view>
             <block wx:if="{{item.canRespond}}">
               <view class="request-actions">
                 <button class="small-btn ghost" data-id="{{item.careId}}" bindtap="openRejectModal">拒绝</button>
@@ -112,6 +112,8 @@
               <button class="text-btn" data-userid="{{item.caredUserId}}" data-name="{{item.displayName}}" data-permission="{{item.permissionLevel}}" bindtap="openCaredHome">查看/管理</button>
               <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="呵护备注" bindtap="openRemarkModal">改备注</button>
             </block>
+            <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openRerequestModal">再请求</button>
+            <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" bindtap="confirmDeleteCare">删除</button>
           </view>
         </view>
       </view>
@@ -142,7 +144,7 @@
 
   <view wx:if="{{permissionModal}}" class="dialog-mask">
     <view class="dialog-card">
-      <view class="dialog-title">修改呵护权限</view>
+      <view class="dialog-title">{{permissionModal.title}}</view>
       <view class="permission-grid modal-permission-grid">
         <view
           wx:for="{{permissions}}"
@@ -157,7 +159,7 @@
       </view>
       <view class="dialog-actions">
         <button class="dialog-btn ghost" bindtap="closePermissionModal">取消</button>
-        <button class="dialog-btn main" bindtap="savePermission">保存</button>
+        <button class="dialog-btn main" bindtap="savePermission">{{permissionModal.saveText}}</button>
       </view>
     </view>
   </view>

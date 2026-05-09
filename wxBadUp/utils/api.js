@@ -1,7 +1,7 @@
 // 后端接口封装。
 // iOS App 和小程序共用同一套 PHP 接口，方便后续维护数据一致性。
 
-const baseURL = 'http://shouzhuan007.com/phpBadUp/'
+const baseURL = 'https://55shouzhuan.com/phpBadUp/'
 const appVersion = '1.0.2'
 
 // 统一的 POST 请求入口：
@@ -274,6 +274,16 @@ function updateCarePermission(userId, careId, permissionLevel) {
   return request('bad_CarePermissionUpdate.php', { userId, careId, permissionLevel })
 }
 
+// 被拒绝后重新发起呵护请求。
+function rerequestCare(userId, careId, permissionLevel) {
+  return request('bad_CareRerequest.php', { userId, careId, permissionLevel })
+}
+
+// 删除自己创建的呵护关系；双向呵护时只删除当前这一条方向。
+function deleteCare(userId, careId) {
+  return request('bad_CareDelete.php', { userId, careId })
+}
+
 module.exports = {
   baseURL,
   appVersion,
@@ -297,4 +307,6 @@ module.exports = {
   respondCare,
   updateCareRemark,
   updateCarePermission,
+  rerequestCare,
+  deleteCare,
 }

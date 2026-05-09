@@ -17,6 +17,7 @@ struct BadUpUser: Codable, Equatable {
     let phone: String?
     let email: String?
     let avatar: String?
+    let careCode: String?
     let deviceId: String?
     let platform: String?
     let appVersion: String?
@@ -33,6 +34,7 @@ struct BadUpUser: Codable, Equatable {
         phone: String?,
         email: String?,
         avatar: String?,
+        careCode: String?,
         deviceId: String?,
         platform: String?,
         appVersion: String?,
@@ -48,6 +50,7 @@ struct BadUpUser: Codable, Equatable {
         self.phone = phone
         self.email = email
         self.avatar = avatar
+        self.careCode = careCode
         self.deviceId = deviceId
         self.platform = platform
         self.appVersion = appVersion
@@ -67,6 +70,7 @@ extension BadUpUser {
         case phone
         case email
         case avatar
+        case careCode
         case deviceId
         case platform
         case appVersion
@@ -110,6 +114,7 @@ extension BadUpUser {
             phone: try container.decodeIfPresent(String.self, forKey: .phone),
             email: try container.decodeIfPresent(String.self, forKey: .email),
             avatar: try container.decodeIfPresent(String.self, forKey: .avatar),
+            careCode: try container.decodeIfPresent(String.self, forKey: .careCode),
             deviceId: try container.decodeIfPresent(String.self, forKey: .deviceId),
             platform: try container.decodeIfPresent(String.self, forKey: .platform),
             appVersion: try container.decodeIfPresent(String.self, forKey: .appVersion),

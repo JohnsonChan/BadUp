@@ -73,16 +73,18 @@ Page({
       const guardianName = item.guardianUserName || `种子${guardianUserId}`
       const caredName = item.caredUserName || `种子${caredUserId}`
       const displayName = item.displayName || (mode === 'guardian' ? caredName : guardianName)
+      const defaultName = mode === 'guardian' ? `种子${caredUserId}` : `种子${guardianUserId}`
+      const relationDisplayName = displayName === defaultName ? '她/他' : displayName
       const status = Number(item.status || 0)
       const statusClass = status === 1 ? 'accepted' : (status === 2 ? 'rejected' : 'pending')
-      let relationText = mode === 'guardian' ? `正在呵护${displayName}` : `${displayName}正在呵护我`
+      let relationText = mode === 'guardian' ? `正在呵护${relationDisplayName}` : `${relationDisplayName}正在呵护我`
 
       if (mode === 'guardian' && status === 0 && Number(item.requesterUserId) !== userId) {
-        relationText = `${displayName}请求你呵护`
+        relationText = `${relationDisplayName}请求你呵护`
       } else if (mode === 'cared' && status === 0) {
-        relationText = `等待${displayName}同意呵护我`
+        relationText = `等待${relationDisplayName}同意呵护我`
       } else if (mode === 'cared' && status === 2) {
-        relationText = `${displayName}已拒绝呵护我`
+        relationText = `${relationDisplayName}已拒绝呵护我`
       }
 
       return {
@@ -91,6 +93,8 @@ Page({
         statusClass,
         relationText,
         canUpdatePermission: status === 1 && Number(item.requesterUserId) === userId,
+        canDelete: Number(item.requesterUserId) === userId,
+        canRerequest: status === 2 && Number(item.requesterUserId) === userId,
       }
     })
   },
@@ -251,6 +255,21 @@ Page({
       permissionModal: {
         id: Number(event.currentTarget.dataset.id),
         value: Number(event.currentTarget.dataset.permission || 1),
+        mode: 'update',
+        title: '修改呵护权限',
+        saveText: '保存',
+      },
+    })
+  },
+
+  openRerequestModal(event) {
+    this.setData({
+      permissionModal: {
+        id: Number(event.currentTarget.dataset.id),
+        value: Number(event.currentTarget.dataset.permission || 1),
+        mode: 'rerequest',
+        title: '再次请求呵护',
+        saveText: '再请求',
       },
     })
   },
@@ -274,15 +293,43 @@ Page({
     const modal = this.data.permissionModal
     if (!userId || !modal) return
 
-    api.updateCarePermission(userId, modal.id, modal.value)
+    const requestTask = modal.mode === 'rerequest'
+      ? api.rerequestCare(userId, modal.id, modal.value)
+      : api.updateCarePermission(userId, modal.id, modal.value)
+
+    requestTask
       .then(() => {
-        wx.showToast({ title: '权限已更新', icon: 'success' })
+        wx.showToast({ title: modal.mode === 'rerequest' ? '已再次请求' : '权限已更新', icon: 'success' })
         this.setData({ permissionModal: null })
         this.loadAll()
       })
       .catch((error) => {
-        this.showError(error, '保存失败')
+        this.showError(error, modal.mode === 'rerequest' ? '再请求失败' : '保存失败')
       })
+  },
+
+  confirmDeleteCare(event) {
+    const userId = this.data.user && this.data.user.userId
+    const careId = Number(event.currentTarget.dataset.id)
+    if (!userId || !careId) return
+
+    wx.showModal({
+      title: '删除呵护关系',
+      content: '只删除这条呵护关系，不会删除习惯和记录；如果双方互相呵护，另一条反向关系不会受影响。',
+      confirmText: '删除',
+      confirmColor: '#d84f49',
+      success: (res) => {
+        if (!res.confirm) return
+        api.deleteCare(userId, careId)
+          .then(() => {
+            wx.showToast({ title: '已删除', icon: 'success' })
+            this.loadAll()
+          })
+          .catch((error) => {
+            this.showError(error, '删除失败')
+          })
+      },
+    })
   },
 
   showError(error, fallback) {
