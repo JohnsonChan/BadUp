@@ -2172,7 +2172,7 @@ private struct MoreView: View {
                         GrowthIndexView(index: behaviorScore ?? 0)
                     } label: {
                         InfoRow(
-                            title: "生长指数",
+                            title: "生长分数",
                             value: scoreText,
                             valueColor: scoreColor
                         )
@@ -3190,7 +3190,7 @@ private struct GrowthIndexView: View {
 
                     Spacer()
 
-                    Text("生长指数：\(index)")
+                    Text("生长分数：\(index)")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(.secondary)
                 }
@@ -3215,7 +3215,7 @@ private struct GrowthIndexView: View {
                 endPoint: .bottom
             )
         )
-        .navigationTitle("生长指数")
+        .navigationTitle("生长分数")
         .navigationBarTitleDisplayMode(.inline)
     }
 }

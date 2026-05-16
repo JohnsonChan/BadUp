@@ -6,24 +6,16 @@ require_once "bad_Database.php";
 $data = badGetRequestData();
 badRequireFields($data, ['userId']);
 
-function badCareUserName($userId, $userName, $remark) {
-    $remark = trim((string)$remark);
-    if ($remark !== '') return $remark;
-    if (!empty($userName)) return $userName;
-    return '种子' . $userId;
-}
-
-function badMapCareRow($row, $currentUserId, $mode) {
+function badMapCareRow($pdo, $row, $currentUserId, $mode) {
     $permissionLevel = badNormalizeCarePermission($row['permissionLevel']);
     if ($mode === 'guardian') {
         $otherUserId = intval($row['caredUserId']);
         $otherUserName = $row['caredUserName'];
-        $remark = $row['guardianRemark'];
     } else {
         $otherUserId = intval($row['guardianUserId']);
         $otherUserName = $row['guardianUserName'];
-        $remark = $row['caredRemark'];
     }
+    $remark = badCareRemarkOwnedBy($pdo, $currentUserId, $otherUserId);
 
     $status = intval($row['status']);
     if ($status === 1) {
@@ -43,7 +35,7 @@ function badMapCareRow($row, $currentUserId, $mode) {
         'otherUserId' => $otherUserId,
         'otherUserName' => $otherUserName,
         'remark' => $remark,
-        'displayName' => badCareUserName($otherUserId, $otherUserName, $remark),
+        'displayName' => badCareDisplayName($otherUserId, $otherUserName, $remark),
         'permissionLevel' => $permissionLevel,
         'permissionName' => badCarePermissionName($permissionLevel),
         'status' => $status,
@@ -78,7 +70,7 @@ try {
     $guardianQuery->execute([':userId' => $userId]);
     $careAsGuardian = [];
     foreach ($guardianQuery->fetchAll() as $row) {
-        $careAsGuardian[] = badMapCareRow($row, $userId, 'guardian');
+        $careAsGuardian[] = badMapCareRow($pdo, $row, $userId, 'guardian');
     }
 
     $caredQuery = $pdo->prepare($baseSql . "
@@ -88,7 +80,7 @@ try {
     $caredQuery->execute([':userId' => $userId]);
     $careAsCared = [];
     foreach ($caredQuery->fetchAll() as $row) {
-        $careAsCared[] = badMapCareRow($row, $userId, 'cared');
+        $careAsCared[] = badMapCareRow($pdo, $row, $userId, 'cared');
     }
 
     badResponse(200, 'OK', [

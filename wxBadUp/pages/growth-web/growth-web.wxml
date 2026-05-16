@@ -1,6 +1,6 @@
-<!-- 生长指数页：用小程序 Canvas 复刻 phpBadUp/yaji.html，避免 web-view 的 HTTP/业务域名限制。 -->
+<!-- 生长分数页：用小程序 Canvas 复刻 phpBadUp/yaji.html，避免 web-view 的 HTTP/业务域名限制。 -->
 <view class="page">
-  <navigation-bar title="生长指数" color="#182827" background="#F6FBF8"></navigation-bar>
+  <navigation-bar title="生长分数" color="#182827" background="#F6FBF8"></navigation-bar>
 
   <view class="growth-content">
     <view class="growth-header">

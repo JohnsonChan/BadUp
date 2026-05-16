@@ -47,19 +47,44 @@ try {
         badResponse(409, '呵护申请已发送，请等待对方确认');
     }
 
+    $reverse = $pdo->prepare("
+        SELECT guardianRemark, caredRemark
+        FROM bad_CareRelation
+        WHERE guardianUserId = :caredUserId
+          AND caredUserId = :guardianUserId
+        LIMIT 1
+    ");
+    $reverse->execute([
+        ':guardianUserId' => $guardianUserId,
+        ':caredUserId' => $caredUserId
+    ]);
+    $reverseRow = $reverse->fetch();
+    $initialGuardianRemark = null;
+    $initialCaredRemark = null;
+    if ($reverseRow) {
+        $reverseCaredRemark = trim((string)$reverseRow['caredRemark']);
+        $reverseGuardianRemark = trim((string)$reverseRow['guardianRemark']);
+        $initialGuardianRemark = $reverseCaredRemark !== '' ? $reverseCaredRemark : null;
+        $initialCaredRemark = $reverseGuardianRemark !== '' ? $reverseGuardianRemark : null;
+    }
+
     if ($row) {
         $stmt = $pdo->prepare("
             UPDATE bad_CareRelation
                SET requesterUserId = :requesterUserId,
                    permissionLevel = :permissionLevel,
                    status = 0,
-                   rejectReason = NULL
+                   rejectReason = NULL,
+                   guardianRemark = :guardianRemark,
+                   caredRemark = :caredRemark
              WHERE careId = :careId
              LIMIT 1
         ");
         $stmt->execute([
             ':requesterUserId' => $userId,
             ':permissionLevel' => $permissionLevel,
+            ':guardianRemark' => $initialGuardianRemark,
+            ':caredRemark' => $initialCaredRemark,
             ':careId' => intval($row['careId'])
         ]);
         badResponse(200, 'CareRequestSent', ['careId' => intval($row['careId'])]);
@@ -69,13 +94,15 @@ try {
         INSERT INTO bad_CareRelation
         (guardianUserId, caredUserId, requesterUserId, permissionLevel, status, rejectReason, guardianRemark, caredRemark, createdAt)
         VALUES
-        (:guardianUserId, :caredUserId, :requesterUserId, :permissionLevel, 0, NULL, NULL, NULL, :createdAt)
+        (:guardianUserId, :caredUserId, :requesterUserId, :permissionLevel, 0, NULL, :guardianRemark, :caredRemark, :createdAt)
     ");
     $stmt->execute([
         ':guardianUserId' => $guardianUserId,
         ':caredUserId' => $caredUserId,
         ':requesterUserId' => $userId,
         ':permissionLevel' => $permissionLevel,
+        ':guardianRemark' => $initialGuardianRemark,
+        ':caredRemark' => $initialCaredRemark,
         ':createdAt' => date('Y-m-d H:i:s')
     ]);
 

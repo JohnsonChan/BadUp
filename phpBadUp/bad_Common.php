@@ -182,6 +182,58 @@ function badCarePermissionName($level) {
     return '低权限';
 }
 
+// 守护关系里的展示昵称：优先备注，其次用户默认昵称，最后回退到种子ID。
+function badCareDisplayName($userId, $userName, $remark) {
+    $remark = trim((string)$remark);
+    if ($remark !== '') return $remark;
+    $userName = trim((string)$userName);
+    if ($userName !== '') return $userName;
+    return '种子' . intval($userId);
+}
+
+// 读取“ownerUserId 给 otherUserId 的备注”。
+// 同一对用户可能存在 A 守护 B 和 B 守护 A 两条方向关系，备注需要跨方向统一展示。
+function badCareRemarkOwnedBy($pdo, $ownerUserId, $otherUserId) {
+    $ownerUserId = intval($ownerUserId);
+    $otherUserId = intval($otherUserId);
+
+    $asGuardian = $pdo->prepare("
+        SELECT guardianRemark AS remark
+        FROM bad_CareRelation
+        WHERE guardianUserId = :ownerUserId
+          AND caredUserId = :otherUserId
+        LIMIT 1
+    ");
+    $asGuardian->execute([
+        ':ownerUserId' => $ownerUserId,
+        ':otherUserId' => $otherUserId
+    ]);
+    $row = $asGuardian->fetch();
+    if ($row) {
+        $remark = trim((string)$row['remark']);
+        if ($remark !== '') return $remark;
+    }
+
+    $asCared = $pdo->prepare("
+        SELECT caredRemark AS remark
+        FROM bad_CareRelation
+        WHERE guardianUserId = :otherUserId
+          AND caredUserId = :ownerUserId
+        LIMIT 1
+    ");
+    $asCared->execute([
+        ':ownerUserId' => $ownerUserId,
+        ':otherUserId' => $otherUserId
+    ]);
+    $row = $asCared->fetch();
+    if ($row) {
+        $remark = trim((string)$row['remark']);
+        if ($remark !== '') return $remark;
+    }
+
+    return '';
+}
+
 // 从习惯行里取“这个习惯作用于谁”。老数据没有 subjectUserId 时回退到 userId。
 function badBehaviorSubjectUserId($behavior) {
     if (isset($behavior['subjectUserId']) && $behavior['subjectUserId'] !== null && $behavior['subjectUserId'] !== '') {

@@ -1,5 +1,5 @@
 <?php
-// 更新呵护关系备注：呵护者维护 guardianRemark，被呵护者维护 caredRemark。
+// 更新守护备注：备注属于“当前用户给对方的昵称”，双向守护时两条方向关系同步更新。
 require_once "bad_Common.php";
 require_once "bad_Database.php";
 
@@ -27,17 +27,35 @@ try {
     }
 
     if (intval($row['guardianUserId']) === $userId) {
-        $field = 'guardianRemark';
+        $otherUserId = intval($row['caredUserId']);
     } else if (intval($row['caredUserId']) === $userId) {
-        $field = 'caredRemark';
+        $otherUserId = intval($row['guardianUserId']);
     } else {
         badResponse(403, 'PermissionDenied');
     }
 
-    $stmt = $pdo->prepare("UPDATE bad_CareRelation SET $field = :remark WHERE careId = :careId LIMIT 1");
-    $stmt->execute([
+    $asGuardian = $pdo->prepare("
+        UPDATE bad_CareRelation
+           SET guardianRemark = :remark
+         WHERE guardianUserId = :userId
+           AND caredUserId = :otherUserId
+    ");
+    $asGuardian->execute([
         ':remark' => $remark,
-        ':careId' => $careId
+        ':userId' => $userId,
+        ':otherUserId' => $otherUserId
+    ]);
+
+    $asCared = $pdo->prepare("
+        UPDATE bad_CareRelation
+           SET caredRemark = :remark
+         WHERE guardianUserId = :otherUserId
+           AND caredUserId = :userId
+    ");
+    $asCared->execute([
+        ':remark' => $remark,
+        ':userId' => $userId,
+        ':otherUserId' => $otherUserId
     ]);
 
     badResponse(200, 'RemarkUpdated');

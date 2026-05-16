@@ -107,7 +107,7 @@ Page({
       })
   },
 
-  // 点击生长指数时，进入网页页，并把当前指数作为 index 参数传给网页。
+  // 点击生长分数时，进入网页页，并把当前指数作为 index 参数传给网页。
   openGrowthIndexPage() {
     const score = Number(this.data.behaviorScore)
     const index = Number.isFinite(score) ? score : 0

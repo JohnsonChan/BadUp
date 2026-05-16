@@ -14,7 +14,7 @@ try {
     $permissionLevel = badNormalizeCarePermission($data['permissionLevel']);
 
     $find = $pdo->prepare("
-        SELECT careId, requesterUserId, status
+        SELECT careId, guardianUserId, caredUserId, requesterUserId, status
         FROM bad_CareRelation
         WHERE careId = :careId
         LIMIT 1
@@ -35,16 +35,43 @@ try {
         badResponse(409, '呵护申请已发送，请等待对方确认');
     }
 
+    $guardianUserId = intval($row['guardianUserId']);
+    $caredUserId = intval($row['caredUserId']);
+    $reverse = $pdo->prepare("
+        SELECT guardianRemark, caredRemark
+        FROM bad_CareRelation
+        WHERE guardianUserId = :caredUserId
+          AND caredUserId = :guardianUserId
+        LIMIT 1
+    ");
+    $reverse->execute([
+        ':guardianUserId' => $guardianUserId,
+        ':caredUserId' => $caredUserId
+    ]);
+    $reverseRow = $reverse->fetch();
+    $initialGuardianRemark = null;
+    $initialCaredRemark = null;
+    if ($reverseRow) {
+        $reverseCaredRemark = trim((string)$reverseRow['caredRemark']);
+        $reverseGuardianRemark = trim((string)$reverseRow['guardianRemark']);
+        $initialGuardianRemark = $reverseCaredRemark !== '' ? $reverseCaredRemark : null;
+        $initialCaredRemark = $reverseGuardianRemark !== '' ? $reverseGuardianRemark : null;
+    }
+
     $stmt = $pdo->prepare("
         UPDATE bad_CareRelation
            SET permissionLevel = :permissionLevel,
                status = 0,
-               rejectReason = NULL
+               rejectReason = NULL,
+               guardianRemark = :guardianRemark,
+               caredRemark = :caredRemark
          WHERE careId = :careId
          LIMIT 1
     ");
     $stmt->execute([
         ':permissionLevel' => $permissionLevel,
+        ':guardianRemark' => $initialGuardianRemark,
+        ':caredRemark' => $initialCaredRemark,
         ':careId' => $careId
     ]);
 
