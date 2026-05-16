@@ -15,7 +15,7 @@
     <view class="growth-footer">
       <view class="stage-row">
         <text class="stage-name">{{stageName}}</text>
-        <text class="index-text">成长指数：<text>{{indexValue}}</text></text>
+        <text class="index-text">生长分数：<text>{{indexValue}}</text></text>
       </view>
       <view class="progress-track">
         <view class="progress-fill" style="width: {{progressPercent}}%;">
