@@ -22,7 +22,10 @@ Page({
     subjectPermissionLevel: 0,
     isSubjectMode: false,
     canManageSubject: true,
+    canShowAddButton: false,
+    isSelfLockedByGuardian: false,
     pageTitle: '芽记',
+    heroTitle: '今日习惯记录',
     todayText: '',
     todayDate: '',
 
@@ -62,13 +65,16 @@ Page({
     const subjectUserId = Number(options && options.subjectUserId)
     const isSubjectMode = Number.isFinite(subjectUserId) && subjectUserId > 0
     const permissionLevel = Number(options && options.permissionLevel)
+    const decodedSubjectName = isSubjectMode ? decodeURIComponent((options && options.subjectName) || '').trim() : ''
+    const subjectDisplayName = decodedSubjectName || (isSubjectMode ? `种子${subjectUserId}` : '')
     this.setData({
       subjectUserId: isSubjectMode ? subjectUserId : null,
-      subjectName: isSubjectMode ? decodeURIComponent((options && options.subjectName) || '') : '',
+      subjectName: subjectDisplayName,
       subjectPermissionLevel: isSubjectMode && Number.isFinite(permissionLevel) ? permissionLevel : 0,
       isSubjectMode,
       canManageSubject: !isSubjectMode || permissionLevel >= 2,
-      pageTitle: isSubjectMode ? (decodeURIComponent((options && options.subjectName) || '') || '守护对象') : '芽记',
+      pageTitle: isSubjectMode ? subjectDisplayName : '芽记',
+      heroTitle: isSubjectMode ? `守护${subjectDisplayName}的记录` : '今日习惯记录',
       todayText: dateUtil.formatChineseDate(now),
       todayDate: dateUtil.formatDate(now),
     })
@@ -308,7 +314,13 @@ Page({
     if (!user) return Promise.resolve()
 
     return api.fetchTodayCounts(user.userId, todayDate, this.getActiveSubjectUserId())
-      .then((list) => {
+      .then((result) => {
+        const list = Array.isArray(result) ? result : (result.list || [])
+        const serverCanManage = Array.isArray(result) ? null : result.canManageSubject
+        const canManageSubject = serverCanManage === null || serverCanManage === undefined
+          ? this.data.canManageSubject
+          : !!serverCanManage
+        const isSelfLockedByGuardian = !this.data.isSubjectMode && !canManageSubject
         const mapped = list.map((item) => {
           const behavior = this.normalizeBehavior(item)
           return {
@@ -320,6 +332,9 @@ Page({
         this.setData({
           behaviors: mapped.map((item) => item.behavior),
           todayCounts: mapped,
+          canManageSubject,
+          canShowAddButton: canManageSubject,
+          isSelfLockedByGuardian,
         })
       })
       .catch((error) => {
@@ -339,6 +354,7 @@ Page({
       countRowDesc: this.truncateText(behaviorDesc, countRowDescLimit),
       colorHex: item.colorHex || '#F55F52',
       behaviorType: Number(item.behaviorType) === 1 ? 1 : -1,
+      scoreUnit: Number(item.scoreUnit || (Number(item.behaviorType) === 1 ? 1 : -2)),
       sortOrder: Number(item.sortOrder || 0),
     }
   },
@@ -368,7 +384,10 @@ Page({
   // 进入新增习惯页。
   goAddBehavior() {
     if (!this.data.canManageSubject) {
-      wx.showToast({ title: '当前只能查看，不能新增习惯', icon: 'none' })
+      wx.showToast({
+        title: this.data.isSelfLockedByGuardian ? '请联系守护帮忙编辑习惯' : '当前只能查看，不能新增习惯',
+        icon: 'none',
+      })
       return
     }
     const subjectUserId = this.getActiveSubjectUserId()
@@ -378,6 +397,15 @@ Page({
 
   // 进入更多页。
   goMore() {
+    if (this.data.isSubjectMode) {
+      const subjectUserId = this.getActiveSubjectUserId()
+      const subjectName = encodeURIComponent(this.data.subjectName || this.data.pageTitle || '')
+      wx.navigateTo({
+        url: `/pages/more/more?subjectUserId=${subjectUserId}&subjectName=${subjectName}&hideCareManagement=1`,
+      })
+      return
+    }
+
     wx.navigateTo({ url: '/pages/more/more' })
   },
 
@@ -387,12 +415,15 @@ Page({
     if (this.data.isSorting) {
       return
     }
-    if (!this.data.canManageSubject) {
-      wx.showToast({ title: '当前只能查看，不能记录', icon: 'none' })
-      return
-    }
     if (this.data.skipNextTapBehaviorId === behaviorId) {
       this.setData({ skipNextTapBehaviorId: null })
+      return
+    }
+    if (!this.data.canManageSubject) {
+      wx.showToast({
+        title: this.data.isSelfLockedByGuardian ? '请联系守护者帮忙记录' : '当前权限仅可查看',
+        icon: 'none',
+      })
       return
     }
     const behavior = this.data.behaviors.find((item) => item.behaviorId === behaviorId)
@@ -419,6 +450,10 @@ Page({
     this.didSortDrag = false
     this.sortItemStep = 128
 
+    if (!this.data.canManageSubject) {
+      return
+    }
+
     wx.createSelectorQuery()
       .in(this)
       .selectAll('.behavior-card')
@@ -437,10 +472,21 @@ Page({
     if (this.data.isSorting) {
       return
     }
+    const behaviorId = Number(event.currentTarget.dataset.id)
     if (!this.data.canManageSubject) {
+      const index = Number(event.currentTarget.dataset.index)
+      const touch = (event.touches && event.touches[0]) || (event.changedTouches && event.changedTouches[0])
+      this.isLongPressReady = true
+      this.pressBehaviorId = behaviorId
+      this.pressStartIndex = index
+      this.pressCurrentIndex = index
+      if ((this.pressStartY === null || this.pressStartY === undefined) && touch) {
+        this.pressStartY = touch.clientY
+        this.pressStartX = touch.clientX
+      }
+      this.setData({ skipNextTapBehaviorId: behaviorId })
       return
     }
-    const behaviorId = Number(event.currentTarget.dataset.id)
     const index = Number(event.currentTarget.dataset.index)
     if (!this.data.behaviors[index]) {
       return
@@ -464,6 +510,16 @@ Page({
   },
 
   onBehaviorTouchMove(event) {
+    if (!this.data.canManageSubject) {
+      if (this.isLongPressReady) {
+        const touch = event.touches && event.touches[0]
+        if (touch && Math.abs(touch.clientY - this.pressStartY) >= 18) {
+          this.didSortDrag = true
+        }
+      }
+      return
+    }
+
     if (!this.isLongPressReady) {
       return
     }
@@ -490,26 +546,49 @@ Page({
   },
 
   onBehaviorTouchEnd() {
+    const skipBehaviorId = this.pressBehaviorId
     if (this.data.isSorting) {
       this.finishSort()
       return
     }
 
     if (this.isLongPressReady && !this.didSortDrag) {
-      this.openBehaviorAction(this.pressBehaviorId)
+      if (!this.data.canManageSubject) {
+        wx.showToast({
+          title: this.data.isSelfLockedByGuardian ? '请联系守护帮忙编辑习惯' : '当前权限仅可查看',
+          icon: 'none',
+        })
+      } else {
+        this.openBehaviorAction(this.pressBehaviorId)
+      }
     }
 
     this.resetPressState()
     this.setData({ isLongPressHolding: false })
+    if (!this.data.canManageSubject && skipBehaviorId) {
+      setTimeout(() => {
+        if (this.data.skipNextTapBehaviorId === skipBehaviorId) {
+          this.setData({ skipNextTapBehaviorId: null })
+        }
+      }, 500)
+    }
   },
 
   onBehaviorTouchCancel() {
+    const skipBehaviorId = this.pressBehaviorId
     if (this.data.isSorting) {
       this.finishSort()
       return
     }
     this.resetPressState()
     this.setData({ isLongPressHolding: false })
+    if (!this.data.canManageSubject && skipBehaviorId) {
+      setTimeout(() => {
+        if (this.data.skipNextTapBehaviorId === skipBehaviorId) {
+          this.setData({ skipNextTapBehaviorId: null })
+        }
+      }, 500)
+    }
   },
 
   updateSortPosition(currentY) {
@@ -664,7 +743,7 @@ Page({
     if (!behavior) return
 
     const subjectUserId = this.getActiveSubjectUserId()
-    const url = `/pages/behavior-form/behavior-form?mode=edit&behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&type=${behavior.behaviorType}&subjectUserId=${subjectUserId}`
+    const url = `/pages/behavior-form/behavior-form?mode=edit&behaviorId=${behavior.behaviorId}&name=${encodeURIComponent(behavior.behaviorName)}&desc=${encodeURIComponent(behavior.behaviorDesc)}&color=${encodeURIComponent(behavior.colorHex)}&type=${behavior.behaviorType}&scoreUnit=${behavior.scoreUnit}&subjectUserId=${subjectUserId}`
     this.setData({ pendingAction: null })
     wx.navigateTo({ url })
   },

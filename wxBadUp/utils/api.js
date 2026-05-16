@@ -2,7 +2,7 @@
 // iOS App 和小程序共用同一套 PHP 接口，方便后续维护数据一致性。
 
 const baseURL = 'https://55shouzhuan.com/phpBadUp/'
-const appVersion = '1.0.2'
+const appVersion = '1.0.8'
 
 // 统一的 POST 请求入口：
 // 1. 发起请求
@@ -113,11 +113,18 @@ function loginOrRegister() {
 // 拉取今天的习惯列表和对应计数。
 function fetchTodayCounts(userId, recordDate, subjectUserId) {
   return request('bad_BehaviorTodayCount.php', { userId, recordDate, subjectUserId })
-    .then((res) => res.list || [])
+    .then((res) => ({
+      list: res.list || [],
+      canManageSubject: res.canManageSubject === undefined || res.canManageSubject === null
+        ? null
+        : Number(res.canManageSubject) === 1,
+      hasHighCareLock: Number(res.hasHighCareLock || 0) === 1,
+    }))
 }
 
 // 新增一个习惯项。
-function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType, subjectUserId) {
+// scoreUnit 是单次记录产生的分值：好习惯为 1~5，坏习惯为 -1~-5。
+function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType, scoreUnit, subjectUserId) {
   return request('bad_BehaviorInsert.php', {
     userId,
     subjectUserId,
@@ -125,10 +132,12 @@ function addBehavior(userId, behaviorName, behaviorDesc, colorHex, behaviorType,
     behaviorDesc,
     colorHex,
     behaviorType,
+    scoreUnit,
   }).then((res) => res.data)
 }
 
 // 编辑已有习惯项。
+// 习惯类型和单次分值是创建时敲定的历史规则，编辑接口不得修改。
 function updateBehavior(userId, behaviorId, behaviorName, behaviorDesc, colorHex, subjectUserId) {
   return request('bad_BehaviorUpdate.php', {
     userId,
@@ -199,9 +208,15 @@ function deleteBehaviorRecord(userId, recordId) {
 }
 
 // 拉取用户累计习惯分。
-function fetchUserBehaviorScore(userId) {
-  return request('bad_UserBehaviorScore.php', { userId })
+function fetchUserBehaviorScore(userId, subjectUserId) {
+  return request('bad_UserBehaviorScore.php', { userId, subjectUserId })
     .then((res) => res.data || { behaviorScore: 0, totalCount: 0 })
+}
+
+// 拉取种子信息。subjectUserId 不传时表示查看自己；传入时服务端会校验守护查看权限。
+function fetchUserInfo(userId, subjectUserId) {
+  return request('bad_UserInfo.php', { userId, subjectUserId })
+    .then((res) => res.data || null)
 }
 
 // 保存用户主动确认后的微信昵称和头像地址。
@@ -300,6 +315,7 @@ module.exports = {
   fetchHourRecords,
   deleteBehaviorRecord,
   fetchUserBehaviorScore,
+  fetchUserInfo,
   updateUserProfile,
   uploadAvatar,
   fetchCareList,

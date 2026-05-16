@@ -16,7 +16,7 @@ try {
     // LEFT JOIN 保证即使今天没有记录，习惯项也会返回，todayCount 为 0。
     $sql = "
         SELECT b.behaviorId, b.userId, b.creatorUserId, b.subjectUserId,
-               b.behaviorName, b.behaviorDesc, b.colorHex, b.behaviorType, b.sortOrder,
+               b.behaviorName, b.behaviorDesc, b.colorHex, b.behaviorType, b.scoreUnit, b.sortOrder,
                IFNULL(SUM(r.countNum), 0) AS todayCount
         FROM bad_Behavior b
         LEFT JOIN bad_BehaviorRecord r
@@ -50,7 +50,14 @@ try {
     }
     $stmt->execute($params);
 
-    badResponse(200, 'OK', ['list' => $stmt->fetchAll()]);
+    $canManageSubject = badCanManageSubject($pdo, $userId, $subjectUserId) ? 1 : 0;
+    $hasHighCareLock = $subjectUserId ? (badHasHighCareLock($pdo, $subjectUserId) ? 1 : 0) : 0;
+
+    badResponse(200, 'OK', [
+        'list' => $stmt->fetchAll(),
+        'canManageSubject' => $canManageSubject,
+        'hasHighCareLock' => $hasHighCareLock
+    ]);
 } catch (PDOException $e) {
     badResponse(500, 'DataError: ' . $e->getMessage());
 }

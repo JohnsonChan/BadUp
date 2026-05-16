@@ -56,6 +56,7 @@ Page({
         const hours = Array.from({ length: 24 }, (_, hour) => ({
           hour,
           hourText: `${hour < 10 ? '0' : ''}${hour}:00`,
+          recordTitle: this.hourRangeRecordTitle(hour),
           count: counts[hour] || 0,
           clickable: (counts[hour] || 0) > 0,
         }))
@@ -88,7 +89,7 @@ Page({
       isRecordLoading: true,
       recordSheetError: '',
       selectedHour: hour,
-      selectedHourText: `${hour < 10 ? '0' : ''}${hour}:00`,
+      selectedHourText: this.hourRangeRecordTitle(hour),
       hourRecords: [],
     })
 
@@ -122,7 +123,7 @@ Page({
     const record = this.data.hourRecords.find((item) => item.recordId === recordId)
     if (!record) return
     if (!record.canDelete) {
-      wx.showToast({ title: '当前只能查看，不能删除记录', icon: 'none' })
+      wx.showToast({ title: '当前权限只能查看', icon: 'none' })
       return
     }
 
@@ -288,5 +289,13 @@ Page({
     const parts = date.split('-')
     if (parts.length !== 3) return date
     return `${Number(parts[0])}年${Number(parts[1])}月${Number(parts[2])}日`
+  },
+
+  hourRangeRecordTitle(hour) {
+    const startHour = Number(hour)
+    const endHour = startHour + 1
+    const startText = `${startHour < 10 ? '0' : ''}${startHour}:00`
+    const endText = `${endHour < 10 ? '0' : ''}${endHour}:00`
+    return `${startText}-${endText}的记录`
   },
 })

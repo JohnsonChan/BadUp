@@ -167,6 +167,11 @@ page {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 }
 
+.nav-btn-placeholder {
+  pointer-events: none;
+  opacity: 0;
+}
+
 /* 首页标题区。 */
 .hero {
   text-align: center;
@@ -186,12 +191,15 @@ page {
 }
 
 .hero-tip {
-  display: inline-block;
-  margin-top: 12rpx;
-  padding: 8rpx 18rpx;
+  display: table;
+  margin: 12rpx auto 0;
+  min-width: 196rpx;
+  padding: 8rpx 36rpx;
+  box-sizing: border-box;
   color: #237c5b;
   font-size: 22rpx;
   font-weight: 800;
+  text-align: center;
   border-radius: 999rpx;
   background: rgba(67, 199, 122, 0.12);
 }
@@ -200,7 +208,6 @@ page {
 .behavior-list {
   display: flex;
   flex-direction: column;
-  gap: 22rpx;
 }
 
 .behavior-card {
@@ -210,7 +217,12 @@ page {
   box-shadow: 0 18rpx 34rpx rgba(31, 40, 44, 0.12);
   display: flex;
   align-items: center;
+  overflow: hidden;
   transition: transform 0.16s ease, opacity 0.16s ease;
+}
+
+.behavior-card + .behavior-card {
+  margin-top: 22rpx;
 }
 
 .behavior-card.sorting-card {
@@ -255,27 +267,33 @@ page {
 .count-list {
   display: flex;
   flex-direction: column;
-  gap: 18rpx;
 }
 
 .count-row {
   display: flex;
   align-items: center;
-  gap: 20rpx;
   padding: 24rpx;
   border-radius: 26rpx;
   background: rgba(0, 0, 0, 0.045);
+  overflow: hidden;
+}
+
+.count-row + .count-row {
+  margin-top: 18rpx;
 }
 
 .color-dot {
   width: 22rpx;
   height: 22rpx;
   border-radius: 999rpx;
+  flex-shrink: 0;
+  margin-right: 20rpx;
 }
 
 .count-info {
   flex: 1;
   min-width: 0;
+  margin-right: 20rpx;
 }
 
 .count-name {
@@ -317,6 +335,7 @@ page {
 .chevron {
   color: #9aa5a2;
   font-size: 42rpx;
+  margin-left: 4rpx;
 }
 
 /* 两种弹窗共用的蒙层和卡片样式。 */
@@ -328,19 +347,38 @@ page {
   bottom: 0;
   z-index: 20;
   background: rgba(0, 0, 0, 0.26);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx 30rpx calc(48rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .dialog-card {
-  position: absolute;
-  left: 50%;
-  top: 50%;
   width: 620rpx;
+  max-width: 100%;
+  max-height: 100%;
   box-sizing: border-box;
   padding: 34rpx 30rpx 30rpx;
   border-radius: 34rpx;
   background: #fff;
   box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.16);
-  transform: translate(-50%, -50%);
+  overflow-y: auto;
+}
+
+.agreement-layer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 30rpx;
+  box-sizing: border-box;
+  background: transparent;
 }
 
 .dialog-bar {
@@ -384,7 +422,6 @@ page {
 
 .dialog-actions {
   display: flex;
-  gap: 18rpx;
   margin-top: 30rpx;
 }
 
@@ -397,6 +434,10 @@ page {
   border-radius: 22rpx;
   font-size: 27rpx;
   font-weight: 800;
+}
+
+.dialog-btn + .dialog-btn {
+  margin-left: 18rpx;
 }
 
 .dialog-btn::after {

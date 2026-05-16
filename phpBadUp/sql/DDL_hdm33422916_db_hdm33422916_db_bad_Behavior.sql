@@ -9,6 +9,7 @@ CREATE TABLE `bad_Behavior` (
   `behaviorDesc` varchar(255) DEFAULT NULL COMMENT '行为描述',
   `colorHex` varchar(7) NOT NULL COMMENT '按钮颜色，例如 #F55F52',
   `behaviorType` tinyint(4) NOT NULL DEFAULT '-1' COMMENT '行为类型：1好行为，-1坏行为',
+  `scoreUnit` int(11) NOT NULL DEFAULT '-2' COMMENT '单次记录分值：好习惯1到5，坏习惯-1到-5',
   `sortOrder` int(11) NOT NULL DEFAULT '0' COMMENT '排序值，数值越小越靠前，暂时没用',
   `createdAt` datetime NOT NULL COMMENT '创建时间，由PHP赋值',
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

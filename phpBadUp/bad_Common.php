@@ -47,9 +47,40 @@ function badNormalizeBehaviorType($value) {
     return intval($value) === 1 ? 1 : -1;
 }
 
-// 单次记录的习惯分：好习惯 +1，坏习惯 -10。
+// 默认单次记录分值：好习惯 +1，坏习惯 -2。
+// 具体习惯可以通过 bad_Behavior.scoreUnit 覆盖这个默认值。
 function badScoreUnitByBehaviorType($behaviorType) {
-    return badNormalizeBehaviorType($behaviorType) === 1 ? 1 : -10;
+    return badNormalizeBehaviorType($behaviorType) === 1 ? 1 : -2;
+}
+
+// 规范化单次分值：好习惯只允许 +1 ~ +5，坏习惯只允许 -1 ~ -5。
+function badNormalizeScoreUnit($scoreUnit, $behaviorType) {
+    $behaviorType = badNormalizeBehaviorType($behaviorType);
+    $scoreUnit = intval($scoreUnit);
+
+    if ($behaviorType === 1) {
+        if ($scoreUnit < 1 || $scoreUnit > 5) {
+            return 1;
+        }
+        return $scoreUnit;
+    }
+
+    if ($scoreUnit > 0) {
+        $scoreUnit = -$scoreUnit;
+    }
+    if ($scoreUnit > -1 || $scoreUnit < -5) {
+        return -2;
+    }
+    return $scoreUnit;
+}
+
+// 从习惯行里读取单次分值；兼容旧数据没有 scoreUnit 的情况。
+function badScoreUnitByBehavior($behavior) {
+    $behaviorType = isset($behavior['behaviorType']) ? $behavior['behaviorType'] : -1;
+    if (isset($behavior['scoreUnit']) && $behavior['scoreUnit'] !== null && $behavior['scoreUnit'] !== '') {
+        return badNormalizeScoreUnit($behavior['scoreUnit'], $behaviorType);
+    }
+    return badScoreUnitByBehaviorType($behaviorType);
 }
 
 // 呵护码算法：

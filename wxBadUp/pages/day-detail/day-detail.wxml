@@ -54,7 +54,7 @@
       <view class="sheet-handle"></view>
       <view class="sheet-header">
         <view>
-          <view class="sheet-title">{{selectedHourText}} 的记录</view>
+          <view class="sheet-title">{{selectedHourText}}</view>
           <view class="sheet-subtitle">只删除单条记录，不会删除习惯项</view>
         </view>
         <view class="sheet-close" bindtap="closeRecordSheet">×</view>

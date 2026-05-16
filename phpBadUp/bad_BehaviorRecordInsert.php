@@ -20,8 +20,8 @@ try {
         $countNum = 1;
     }
 
-    // 分数按习惯当前类型写入记录表，避免以后修改习惯类型影响历史分数。
-    $behaviorQuery = $pdo->prepare("SELECT userId, creatorUserId, subjectUserId, behaviorType FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
+    // 分数按习惯当前 scoreUnit 写入记录表，避免以后修改习惯分值影响历史记录。
+    $behaviorQuery = $pdo->prepare("SELECT userId, creatorUserId, subjectUserId, behaviorType, scoreUnit FROM bad_Behavior WHERE behaviorId = :behaviorId LIMIT 1");
     $behaviorQuery->execute([':behaviorId' => $behaviorId]);
     $behavior = $behaviorQuery->fetch();
 
@@ -37,7 +37,7 @@ try {
     $subjectUserId = $behaviorSubjectUserId !== null ? $behaviorSubjectUserId : ($requestSubjectUserId !== null ? $requestSubjectUserId : $userId);
     badRequireCanManageSubject($pdo, $userId, $subjectUserId);
 
-    $scoreValue = $countNum * badScoreUnitByBehaviorType($behavior['behaviorType']);
+    $scoreValue = $countNum * badScoreUnitByBehavior($behavior);
 
     $stmt = $pdo->prepare("
         INSERT INTO bad_BehaviorRecord

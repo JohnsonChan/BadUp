@@ -33,7 +33,6 @@ page {
 .profile-head {
   display: flex;
   align-items: center;
-  gap: 22rpx;
   padding: 10rpx 0 24rpx;
   margin-bottom: 4rpx;
   border-bottom: 1rpx solid #edf1ef;
@@ -80,6 +79,7 @@ page {
 .profile-info {
   flex: 1;
   min-width: 0;
+  margin-left: 22rpx;
 }
 
 .profile-name {
@@ -100,7 +100,6 @@ page {
 
 .row {
   display: flex;
-  gap: 24rpx;
   padding: 20rpx 0;
   border-bottom: 1rpx solid #edf1ef;
   color: #1f2d2b;
@@ -123,6 +122,7 @@ page {
 .row text:first-child {
   width: 210rpx;
   flex-shrink: 0;
+  margin-right: 24rpx;
   color: #7a8784;
 }
 
@@ -154,7 +154,6 @@ page {
 .legal-footer-links {
   display: flex;
   justify-content: center;
-  gap: 34rpx;
   padding: 8rpx 30rpx 0;
   font-size: 24rpx;
   font-weight: 700;
@@ -162,6 +161,10 @@ page {
 
 .legal-footer-link {
   color: #1677ff;
+}
+
+.legal-footer-link + .legal-footer-link {
+  margin-left: 34rpx;
 }
 
 /* 底部备案入口，参考微信“关于”页的弱化信息展示。 */

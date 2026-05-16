@@ -34,9 +34,9 @@ page {
 
 .seed-row {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   min-width: 0;
-  gap: 6rpx;
+  flex-wrap: nowrap;
 }
 
 .seed-label,
@@ -45,6 +45,7 @@ page {
   color: #1f2d2b;
   font-size: 28rpx;
   font-weight: 900;
+  flex-shrink: 0;
 }
 
 .subsection-title {
@@ -53,18 +54,21 @@ page {
 }
 
 .seed-id {
+  margin-left: 6rpx;
   color: #173b2f;
   font-size: 34rpx;
   font-weight: 900;
+  line-height: 1;
   letter-spacing: 4rpx;
-  word-break: break-all;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .copy-icon {
   position: relative;
   width: 34rpx;
   height: 34rpx;
-  margin-left: 8rpx;
+  margin-left: 12rpx;
   flex-shrink: 0;
 }
 
@@ -165,7 +169,6 @@ page {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 14rpx;
   width: 100%;
   padding: 18rpx 20rpx;
   box-sizing: border-box;
@@ -190,6 +193,7 @@ page {
 }
 
 .permission-desc {
+  margin-left: 14rpx;
   color: #7a8784;
   font-size: 20rpx;
   font-weight: 600;
@@ -203,7 +207,6 @@ page {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16rpx;
   margin-top: 16rpx;
   padding: 18rpx;
   border-radius: 22rpx;
@@ -247,6 +250,8 @@ page {
 .relation-main {
   flex: 1;
   min-width: 0;
+  margin-left: 16rpx;
+  margin-right: 16rpx;
 }
 
 .relation-name {
@@ -392,11 +397,17 @@ page {
 .relation-side {
   display: flex;
   align-items: center;
-  gap: 8rpx;
   flex-shrink: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
   max-width: 160rpx;
+}
+
+.row-actions .text-btn,
+.request-actions .small-btn,
+.relation-side .text-btn {
+  margin-left: 8rpx;
+  margin-bottom: 8rpx;
 }
 
 .text-btn {
@@ -460,18 +471,22 @@ page {
   bottom: 0;
   z-index: 30;
   background: rgba(0, 0, 0, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx 30rpx calc(48rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 .dialog-card {
-  position: absolute;
-  left: 50%;
-  top: 50%;
   width: 620rpx;
+  max-width: 100%;
+  max-height: 100%;
   padding: 32rpx;
   box-sizing: border-box;
   border-radius: 30rpx;
   background: #fff;
-  transform: translate(-50%, -50%);
+  overflow-y: auto;
 }
 
 .dialog-title {
@@ -502,7 +517,6 @@ page {
 
 .dialog-actions {
   display: flex;
-  gap: 18rpx;
   margin-top: 26rpx;
 }
 
@@ -511,6 +525,10 @@ page {
   height: 76rpx;
   line-height: 76rpx;
   font-size: 27rpx;
+}
+
+.dialog-btn + .dialog-btn {
+  margin-left: 18rpx;
 }
 
 .dialog-btn.ghost {

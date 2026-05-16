@@ -19,7 +19,7 @@
       <view class="section">
         <view class="label label-with-tip">
           <text>习惯类型</text>
-          <text wx:if="{{mode === 'edit'}}" class="type-lock-tip">编辑时不可修改</text>
+          <text wx:if="{{mode === 'edit'}}" class="type-lock-tip">类型和分值不可修改</text>
         </view>
         <view class="type-switch">
           <view
@@ -76,6 +76,31 @@
       <button class="save-btn" loading="{{isSaving}}" bindtap="save">保存</button>
     </view>
   </scroll-view>
+
+  <!-- 单次分值选择弹层：只在新增习惯时使用，创建后分值不可修改。 -->
+  <view wx:if="{{isScoreSheetVisible}}" class="score-sheet-mask" bindtap="closeScoreSheet">
+    <view class="score-sheet" catchtap="noop">
+      <view class="score-sheet-head">
+        <view>
+          <view class="score-sheet-title">{{scoreSheetTitle}}</view>
+          <view class="score-sheet-tip">{{scoreSheetTip}}</view>
+        </view>
+        <view class="score-sheet-close" bindtap="closeScoreSheet">关闭</view>
+      </view>
+
+      <view class="score-options">
+        <view
+          wx:for="{{scoreOptions}}"
+          wx:key="value"
+          class="score-option {{scoreSheetClass}} {{scoreUnit === item.value ? 'selected' : ''}}"
+          data-value="{{item.value}}"
+          bindtap="selectScoreUnit"
+        >
+          {{item.text}}
+        </view>
+      </view>
+    </view>
+  </view>
 
   <!-- 完整颜色板。 -->
   <view wx:if="{{isMoreColorsVisible}}" class="color-sheet-mask" bindtap="closeMoreColors">

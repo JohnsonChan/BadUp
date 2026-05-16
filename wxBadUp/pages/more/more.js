@@ -4,7 +4,13 @@ const app = getApp()
 const contactText = 'BooTry'
 Page({
   data: {
+    pageTitle: '更多',
     user: null,
+    viewerUser: null,
+    subjectUserId: null,
+    subjectName: '',
+    isSubjectMode: false,
+    hideCareManagement: false,
     displayName: '未设置昵称',
     hasAvatar: false,
     registerDate: '-',
@@ -13,23 +19,67 @@ Page({
     behaviorScoreClass: '',
   },
 
-  onShow() {
-    const user = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
-
-    // 这里优先读全局内存，其次读本地缓存，避免页面刷新后信息丢失。
+  onLoad(options) {
+    const subjectUserId = Number(options && options.subjectUserId)
+    const isSubjectMode = Number.isFinite(subjectUserId) && subjectUserId > 0
+    const subjectName = isSubjectMode ? decodeURIComponent((options && options.subjectName) || '') : ''
     this.setData({
-      user,
-      displayName: this.formatDisplayName(user),
-      hasAvatar: !!(user && user.avatar),
-      registerDate: user && user.createdAt ? user.createdAt : '-',
-      platformName: this.formatPlatformName(user && user.platform),
+      pageTitle: isSubjectMode ? '种子信息' : '更多',
+      subjectUserId: isSubjectMode ? subjectUserId : null,
+      subjectName,
+      isSubjectMode,
+      hideCareManagement: Boolean(Number(options && options.hideCareManagement)),
+    })
+  },
+
+  onShow() {
+    const viewerUser = app.globalData.user || wx.getStorageSync('badup.cached.user') || null
+    const fallbackUser = this.data.isSubjectMode
+      ? { userId: this.data.subjectUserId, userName: this.data.subjectName }
+      : viewerUser
+
+    // 先用本地或路由里的信息占位，随后如果是守护对象，再向服务端读取目标用户资料。
+    this.setData({
+      viewerUser,
+      user: fallbackUser,
+      displayName: this.formatDisplayName(fallbackUser),
+      hasAvatar: !!(fallbackUser && fallbackUser.avatar),
+      registerDate: fallbackUser && fallbackUser.createdAt ? fallbackUser.createdAt : '-',
+      platformName: this.formatPlatformName(fallbackUser && fallbackUser.platform),
       behaviorScore: '-',
       behaviorScoreClass: '',
     })
 
-    if (user && user.userId) {
-      this.loadBehaviorScore(user.userId)
+    if (this.data.isSubjectMode) {
+      this.loadSubjectUserInfo()
+      return
     }
+
+    if (viewerUser && viewerUser.userId) {
+      this.loadBehaviorScore(viewerUser.userId, viewerUser.userId)
+    }
+  },
+
+  loadSubjectUserInfo() {
+    const viewerUser = this.data.viewerUser
+    const subjectUserId = this.data.subjectUserId
+    if (!viewerUser || !viewerUser.userId || !subjectUserId) return
+
+    api.fetchUserInfo(viewerUser.userId, subjectUserId)
+      .then((user) => {
+        this.setData({
+          user,
+          displayName: this.formatDisplayName(user),
+          hasAvatar: !!(user && user.avatar),
+          registerDate: user && user.createdAt ? user.createdAt : '-',
+          platformName: this.formatPlatformName(user && user.platform),
+        })
+        this.loadBehaviorScore(viewerUser.userId, subjectUserId)
+      })
+      .catch((error) => {
+        wx.showToast({ title: error.message || '种子信息加载失败', icon: 'none' })
+        this.loadBehaviorScore(viewerUser.userId, subjectUserId)
+      })
   },
 
   formatDisplayName(user) {
@@ -42,8 +92,8 @@ Page({
     return '未设置昵称'
   },
 
-  loadBehaviorScore(userId) {
-    api.fetchUserBehaviorScore(userId)
+  loadBehaviorScore(userId, subjectUserId) {
+    api.fetchUserBehaviorScore(userId, subjectUserId)
       .then((score) => {
         const behaviorScore = Number(score.behaviorScore || 0)
         this.setData({

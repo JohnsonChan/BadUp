@@ -63,7 +63,6 @@ page {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24rpx;
   margin-bottom: 20rpx;
 }
 
@@ -74,6 +73,7 @@ page {
 }
 
 .index-text {
+  margin-left: 24rpx;
   color: #7a8784;
   font-size: 23rpx;
   white-space: nowrap;

@@ -69,7 +69,7 @@ private enum BehaviorColorOption: String, CaseIterable, Identifiable {
 }
 
 // 习惯类型。
-// 好习惯记录一次 +1 分，坏习惯记录一次 -10 分；分值由服务端在写入记录时固化。
+// 单次分值在创建习惯时敲定，后续编辑不能修改，服务端写入记录时会固化到 scoreValue。
 private enum BehaviorKind: Int, CaseIterable, Identifiable, Hashable {
     case good = 1
     case bad = -1
@@ -83,10 +83,17 @@ private enum BehaviorKind: Int, CaseIterable, Identifiable, Hashable {
         }
     }
 
-    var subtitle: String {
+    var defaultScoreUnit: Int {
         switch self {
-        case .good: return "记录一次 +1 分"
-        case .bad: return "记录一次 -10 分"
+        case .good: return 1
+        case .bad: return -2
+        }
+    }
+
+    var scoreOptions: [Int] {
+        switch self {
+        case .good: return Array(1...5)
+        case .bad: return Array((-5 ... -1).reversed())
         }
     }
 
@@ -100,9 +107,29 @@ private enum BehaviorKind: Int, CaseIterable, Identifiable, Hashable {
     static func fromServerValue(_ value: Int?) -> BehaviorKind {
         value == 1 ? .good : .bad
     }
+
+    func normalizedScoreUnit(_ value: Int?) -> Int {
+        guard let value else {
+            return defaultScoreUnit
+        }
+        switch self {
+        case .good:
+            return (1...5).contains(value) ? value : defaultScoreUnit
+        case .bad:
+            return (-5 ... -1).contains(value) ? value : defaultScoreUnit
+        }
+    }
+
+    static func scoreText(_ value: Int) -> String {
+        value > 0 ? "+\(value)" : "\(value)"
+    }
+
+    func subtitle(scoreUnit: Int) -> String {
+        "记录一次 \(Self.scoreText(normalizedScoreUnit(scoreUnit))) 分"
+    }
 }
 
-// 呵护权限，与小程序保持一致。
+// 守护权限，与小程序保持一致。
 private enum CarePermission: Int, CaseIterable, Identifiable, Hashable {
     case low = 1
     case middle = 2
@@ -153,7 +180,9 @@ private extension Array where Element == ColorPaletteItem {
         ColorPaletteItem(hex: "#E84393", name: "洋红", color: Color(red: 0.91, green: 0.26, blue: 0.58)),
         ColorPaletteItem(hex: "#00A8FF", name: "天空蓝", color: Color(red: 0.00, green: 0.66, blue: 1.00)),
         ColorPaletteItem(hex: "#F1C40F", name: "明黄", color: Color(red: 0.95, green: 0.77, blue: 0.06)),
-        ColorPaletteItem(hex: "#6D214F", name: "酒红", color: Color(red: 0.43, green: 0.13, blue: 0.31))
+        ColorPaletteItem(hex: "#6D214F", name: "酒红", color: Color(red: 0.43, green: 0.13, blue: 0.31)),
+        ColorPaletteItem(hex: "#B57EDC", name: "薰衣草", color: Color(red: 0.71, green: 0.49, blue: 0.86)),
+        ColorPaletteItem(hex: "#B8E986", name: "柠檬绿", color: Color(red: 0.72, green: 0.91, blue: 0.53))
     ]
 }
 
@@ -166,6 +195,7 @@ private struct BehaviorItem: Identifiable, Hashable {
     let detail: String
     let colorHex: String
     var behaviorKind: BehaviorKind = .bad
+    var scoreUnit: Int = BehaviorKind.bad.defaultScoreUnit
     var sortOrder: Int = 0
 
     var tintColor: Color {
@@ -173,6 +203,10 @@ private struct BehaviorItem: Identifiable, Hashable {
             return paletteItem.color
         }
         return BehaviorColorOption.from(hex: colorHex).color
+    }
+
+    var scoreSubtitle: String {
+        behaviorKind.subtitle(scoreUnit: scoreUnit)
     }
 }
 
@@ -184,14 +218,17 @@ private extension BehaviorItem {
         behaviorDesc: String?,
         colorHex: String,
         behaviorType: Int?,
+        scoreUnit: Int?,
         sortOrder: Int?
     ) {
+        let kind = BehaviorKind.fromServerValue(behaviorType)
         self.id = serverBehaviorId
         self.userId = userId
         self.name = behaviorName
         self.detail = behaviorDesc ?? ""
         self.colorHex = colorHex
-        self.behaviorKind = BehaviorKind.fromServerValue(behaviorType)
+        self.behaviorKind = kind
+        self.scoreUnit = kind.normalizedScoreUnit(scoreUnit)
         self.sortOrder = sortOrder ?? 0
     }
 }
@@ -202,6 +239,12 @@ private struct DailyBehaviorCount: Identifiable {
     var count: Int
 
     var id: Int64 { behavior.id }
+}
+
+private struct TodayCountsResult {
+    let counts: [DailyBehaviorCount]
+    let canManageSubject: Bool?
+    let hasHighCareLock: Bool
 }
 
 // 年/月/日视图的统计结构。
@@ -227,6 +270,10 @@ private struct HourSummary: Identifiable {
     var hourText: String {
         String(format: "%02d:00", hour)
     }
+
+    var hourRangeRecordTitle: String {
+        String(format: "%02d:00-%02d:00的记录", hour, hour + 1)
+    }
 }
 
 private struct BehaviorRecordItem: Identifiable, Hashable {
@@ -234,6 +281,11 @@ private struct BehaviorRecordItem: Identifiable, Hashable {
     let recordedAt: String
     let countNum: Int
     let scoreValue: Int
+    let operatorUserId: Int?
+    let operatorDisplayName: String
+    let showOperatorNote: Bool
+    let operatorRecordText: String
+    let canDelete: Bool
 
     var id: Int64 { recordId }
 
@@ -252,6 +304,10 @@ private struct BehaviorRecordItem: Identifiable, Hashable {
 
     var scoreText: String {
         scoreValue > 0 ? "+\(scoreValue)分" : "\(scoreValue)分"
+    }
+
+    var scoreColor: Color {
+        scoreValue >= 0 ? Color(red: 0.26, green: 0.78, blue: 0.48) : Color(red: 0.96, green: 0.37, blue: 0.32)
     }
 }
 
@@ -306,17 +362,17 @@ private struct CareRelationItem: Identifiable, Hashable {
         switch mode {
         case .guardian:
             if status == 0 && requesterUserId != currentUserId {
-                return "\(name)请求你呵护"
+                return "\(name)请求你守护"
             }
-            return "正在呵护\(name)"
+            return "正在守护\(name)"
         case .cared:
             if status == 0 {
-                return "等待\(name)同意呵护我"
+                return "等待\(name)同意守护我"
             }
             if status == 2 {
-                return "\(name)已拒绝呵护我"
+                return "\(name)已拒绝守护我"
             }
-            return "\(name)正在呵护我"
+            return "\(name)正在守护我"
         }
     }
 }
@@ -326,7 +382,7 @@ private enum CareRelationMode: Equatable {
     case cared
 }
 
-// 呵护关系页使用固定浅色视觉，避免系统暗色模式下出现白底白字。
+// 守护关系页使用固定浅色视觉，避免系统暗色模式下出现白底白字。
 private enum CareTheme {
     static let ink = Color(red: 0.07, green: 0.13, blue: 0.12)
     static let green = Color(red: 0.11, green: 0.29, blue: 0.24)
@@ -379,7 +435,7 @@ private final class RemoteBehaviorService {
         return result
     }
 
-    func fetchTodayCounts(userId: Int, date: Date = Date(), subjectUserId: Int? = nil) async throws -> [DailyBehaviorCount] {
+    func fetchTodayCounts(userId: Int, date: Date = Date(), subjectUserId: Int? = nil) async throws -> TodayCountsResult {
         let response: ServerListResponse<ServerBehaviorToday> = try await post(
             "bad_BehaviorTodayCount.php",
             payload: payload([
@@ -388,15 +444,21 @@ private final class RemoteBehaviorService {
             ], subjectUserId: subjectUserId)
         )
 
-        return (response.list ?? []).map { item in
+        let counts = (response.list ?? []).map { item in
             DailyBehaviorCount(
                 behavior: item.behaviorItem,
                 count: item.todayCount.intValue
             )
         }
+
+        return TodayCountsResult(
+            counts: counts,
+            canManageSubject: response.canManageSubject.map { $0.intValue == 1 },
+            hasHighCareLock: response.hasHighCareLock?.intValue == 1
+        )
     }
 
-    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind, subjectUserId: Int? = nil) async throws {
+    func addBehavior(userId: Int, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind, scoreUnit: Int, subjectUserId: Int? = nil) async throws {
         let _: ServerDataResponse<ServerBehavior> = try await post(
             "bad_BehaviorInsert.php",
             payload: payload([
@@ -404,7 +466,8 @@ private final class RemoteBehaviorService {
                 "behaviorName": name,
                 "behaviorDesc": detail,
                 "colorHex": colorHex,
-                "behaviorType": behaviorKind.rawValue
+                "behaviorType": behaviorKind.rawValue,
+                "scoreUnit": behaviorKind.normalizedScoreUnit(scoreUnit)
             ], subjectUserId: subjectUserId)
         )
     }
@@ -554,14 +617,27 @@ private final class RemoteBehaviorService {
         )
     }
 
-    func fetchUserBehaviorScore(userId: Int) async throws -> UserBehaviorScore {
+    func fetchUserBehaviorScore(userId: Int, subjectUserId: Int? = nil) async throws -> UserBehaviorScore {
         let response: ServerDataResponse<UserBehaviorScore> = try await post(
             "bad_UserBehaviorScore.php",
-            payload: [
+            payload: payload([
                 "userId": userId
-            ]
+            ], subjectUserId: subjectUserId)
         )
         return response.data ?? UserBehaviorScore(behaviorScore: 0, totalCount: 0)
+    }
+
+    func fetchUserInfo(userId: Int, subjectUserId: Int? = nil) async throws -> BadUpUser {
+        let response: ServerDataResponse<BadUpUser> = try await post(
+            "bad_UserInfo.php",
+            payload: payload([
+                "userId": userId
+            ], subjectUserId: subjectUserId)
+        )
+        guard let data = response.data else {
+            throw APIClientError.invalidResponse("缺少用户信息")
+        }
+        return data
     }
 
     func fetchCareList(userId: Int) async throws -> CareListResult {
@@ -678,6 +754,8 @@ private struct ServerListResponse<T: Decodable>: Decodable, ServerResponseChecki
     let code: Int
     let msg: String
     let list: [T]?
+    let canManageSubject: LossyInt?
+    let hasHighCareLock: LossyInt?
 }
 
 private struct ServerDataResponse<T: Decodable>: Decodable, ServerResponseChecking {
@@ -715,6 +793,7 @@ private struct ServerBehavior: Decodable {
     let behaviorDesc: String?
     let colorHex: String
     let behaviorType: LossyInt?
+    let scoreUnit: LossyInt?
     let sortOrder: LossyInt?
 
     var behaviorItem: BehaviorItem {
@@ -725,6 +804,7 @@ private struct ServerBehavior: Decodable {
             behaviorDesc: behaviorDesc,
             colorHex: colorHex,
             behaviorType: behaviorType?.intValue,
+            scoreUnit: scoreUnit?.intValue,
             sortOrder: sortOrder?.intValue
         )
     }
@@ -737,6 +817,7 @@ private struct ServerBehaviorToday: Decodable {
     let behaviorDesc: String?
     let colorHex: String
     let behaviorType: LossyInt?
+    let scoreUnit: LossyInt?
     let sortOrder: LossyInt?
     let todayCount: LossyInt
 
@@ -748,6 +829,7 @@ private struct ServerBehaviorToday: Decodable {
             behaviorDesc: behaviorDesc,
             colorHex: colorHex,
             behaviorType: behaviorType?.intValue,
+            scoreUnit: scoreUnit?.intValue,
             sortOrder: sortOrder?.intValue
         )
     }
@@ -874,16 +956,26 @@ private struct ServerHourSummary: Decodable {
 
 private struct ServerBehaviorRecord: Decodable {
     let recordId: LossyInt
+    let operatorUserId: LossyInt?
+    let operatorDisplayName: String?
     let recordedAt: String
     let countNum: LossyInt?
     let scoreValue: LossyInt?
+    let showOperatorNote: LossyInt?
+    let operatorRecordText: String?
+    let canDelete: LossyInt?
 
     var recordItem: BehaviorRecordItem {
         BehaviorRecordItem(
             recordId: Int64(recordId.intValue),
             recordedAt: recordedAt,
             countNum: countNum?.intValue ?? 1,
-            scoreValue: scoreValue?.intValue ?? 0
+            scoreValue: scoreValue?.intValue ?? 0,
+            operatorUserId: operatorUserId?.intValue,
+            operatorDisplayName: operatorDisplayName ?? "",
+            showOperatorNote: (showOperatorNote?.intValue ?? 0) == 1,
+            operatorRecordText: operatorRecordText ?? "",
+            canDelete: (canDelete?.intValue ?? 1) == 1
         )
     }
 }
@@ -896,6 +988,8 @@ private final class ContentViewModel: ObservableObject {
     @Published var addBehaviorErrorMessage: String?
     @Published var isLoading = false
     @Published var didLoadInitialData = false
+    @Published var serverCanManageSubject: Bool?
+    @Published var hasHighCareLock = false
 
     private let remoteService = RemoteBehaviorService.shared
 
@@ -904,9 +998,11 @@ private final class ContentViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            let counts = try await remoteService.fetchTodayCounts(userId: userId, subjectUserId: subjectUserId)
-            todayCounts = counts
-            behaviors = counts.map(\.behavior)
+            let result = try await remoteService.fetchTodayCounts(userId: userId, subjectUserId: subjectUserId)
+            todayCounts = result.counts
+            behaviors = result.counts.map(\.behavior)
+            serverCanManageSubject = result.canManageSubject
+            hasHighCareLock = result.hasHighCareLock
             didLoadInitialData = true
             addBehaviorErrorMessage = nil
         } catch {
@@ -923,7 +1019,7 @@ private final class ContentViewModel: ObservableObject {
         }
     }
 
-    func addBehavior(userId: Int, subjectUserId: Int? = nil, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind) async -> Bool {
+    func addBehavior(userId: Int, subjectUserId: Int? = nil, name: String, detail: String, colorHex: String, behaviorKind: BehaviorKind, scoreUnit: Int) async -> Bool {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -944,6 +1040,7 @@ private final class ContentViewModel: ObservableObject {
                 detail: trimmedDetail,
                 colorHex: colorHex,
                 behaviorKind: behaviorKind,
+                scoreUnit: scoreUnit,
                 subjectUserId: subjectUserId
             )
             addBehaviorErrorMessage = nil
@@ -1203,7 +1300,30 @@ struct ContentView: View {
     }
 
     private var canManageSubject: Bool {
-        !isSubjectMode || subjectPermissionLevel >= 2
+        viewModel.serverCanManageSubject ?? (!isSubjectMode || subjectPermissionLevel >= 2)
+    }
+
+    private var isSelfLockedByGuardian: Bool {
+        !isSubjectMode && viewModel.serverCanManageSubject == false
+    }
+
+    private var canShowAddButton: Bool {
+        viewModel.didLoadInitialData && canManageSubject
+    }
+
+    private var subjectDisplayName: String {
+        let trimmedName = subjectName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedName.isEmpty {
+            return trimmedName
+        }
+        if let subjectUserId {
+            return "种子\(subjectUserId)"
+        }
+        return "守护对象"
+    }
+
+    private var homeHeroTitle: String {
+        isSubjectMode ? "守护\(subjectDisplayName)的记录" : "今日习惯记录"
     }
 
     init(subjectUserId: Int? = nil, subjectName: String? = nil, subjectPermissionLevel: Int = 0) {
@@ -1233,10 +1353,9 @@ struct ContentView: View {
             }
             .modifier(homePresentationModifier)
         }
-        // 强制根视图撑满屏幕，并把背景铺到安全区外，避免出现“圆角白卡+黑边”的观感。
+        // 背景可以铺到安全区外，但内容不能忽略安全区，否则会顶到导航栏下面。
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white.opacity(0.001))
-        .ignoresSafeArea()
+        .background(Color.white.opacity(0.001).ignoresSafeArea())
     }
 
     @ViewBuilder
@@ -1244,7 +1363,7 @@ struct ContentView: View {
         if viewModel.didLoadInitialData {
             HomeContentView(
                 dateText: dateText,
-                heroTitle: isSubjectMode ? "今日呵护记录" : "今日习惯记录",
+                heroTitle: homeHeroTitle,
                 heroTip: isSubjectMode && !canManageSubject ? "当前权限仅可查看" : nil,
                 behaviors: viewModel.behaviors,
                 todayCounts: viewModel.todayCounts,
@@ -1265,18 +1384,24 @@ struct ContentView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button {
-                isPresentingAddBehavior = true
-            } label: {
-                Image(systemName: "plus")
+        if canShowAddButton {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    isPresentingAddBehavior = true
+                } label: {
+                    Image(systemName: "plus")
+                }
             }
-            .disabled(!canManageSubject)
         }
 
         ToolbarItem(placement: .topBarTrailing) {
             NavigationLink {
-                MoreView(user: session.user)
+                MoreView(
+                    user: session.user,
+                    subjectUserId: activeSubjectUserId,
+                    subjectName: subjectName,
+                    hideCareManagement: isSubjectMode
+                )
             } label: {
                 Image(systemName: "ellipsis")
                     .rotationEffect(.degrees(90))
@@ -1299,7 +1424,7 @@ struct ContentView: View {
 
     private func beginRecord(_ behavior: BehaviorItem) {
         guard canManageSubject else {
-            viewModel.addBehaviorErrorMessage = "当前只能查看，不能记录"
+            viewModel.addBehaviorErrorMessage = isSelfLockedByGuardian ? "请联系守护者帮忙记录" : "当前只能查看，不能记录"
             return
         }
         pendingBehavior = behavior
@@ -1307,7 +1432,7 @@ struct ContentView: View {
 
     private func beginBehaviorAction(_ behavior: BehaviorItem) {
         guard canManageSubject else {
-            viewModel.addBehaviorErrorMessage = "当前只能查看，不能编辑习惯"
+            viewModel.addBehaviorErrorMessage = isSelfLockedByGuardian ? "请联系守护帮忙编辑习惯" : "当前只能查看，不能编辑习惯"
             return
         }
         pendingBehavior = nil
@@ -1319,7 +1444,9 @@ struct ContentView: View {
 
     private func moveBehavior(from sourceIndex: Int, to destinationIndex: Int) {
         guard canManageSubject else {
-            viewModel.addBehaviorErrorMessage = "当前只能查看，不能调整习惯顺序"
+            if !isSelfLockedByGuardian {
+                viewModel.addBehaviorErrorMessage = "当前只能查看，不能调整习惯顺序"
+            }
             return
         }
         guard let currentUserId else {
@@ -2016,7 +2143,11 @@ private struct MoreView: View {
     @Environment(\.openURL) private var openURL
 
     let user: BadUpUser?
+    let subjectUserId: Int?
+    let subjectName: String?
+    let hideCareManagement: Bool
 
+    @State private var profileUser: BadUpUser?
     @State private var behaviorScore: Int?
     @State private var scoreLoadError: String?
     @State private var isShowingCopyConfirmation = false
@@ -2029,11 +2160,13 @@ private struct MoreView: View {
         VStack(spacing: 0) {
             List {
                 Section("种子信息") {
-                    InfoRow(title: "种子编号", value: user.map { String($0.userId) } ?? "-")
-                    NavigationLink {
-                        CareRelationView(user: user)
-                    } label: {
-                        InfoRow(title: "呵护关系", value: "管理关系")
+                    InfoRow(title: "种子编号", value: displayUser.map { String($0.userId) } ?? "-")
+                    if !hideCareManagement {
+                        NavigationLink {
+                            CareRelationView(user: user)
+                        } label: {
+                            InfoRow(title: "守护关系", value: "管理关系")
+                        }
                     }
                     NavigationLink {
                         GrowthIndexView(index: behaviorScore ?? 0)
@@ -2076,16 +2209,21 @@ private struct MoreView: View {
             .buttonStyle(.plain)
             .background(Color(uiColor: .systemGroupedBackground))
         }
-        .navigationTitle("关于芽记")
+        .navigationTitle(hideCareManagement ? (subjectName ?? "种子信息") : "关于芽记")
         .navigationBarTitleDisplayMode(.inline)
         .alert("已复制", isPresented: $isShowingCopyConfirmation) {
             Button("知道了", role: .cancel) {}
         } message: {
             Text("已复制 \(contactText)")
         }
-        .task(id: user?.userId) {
+        .task(id: "\(user?.userId ?? 0)-\(subjectUserId ?? 0)") {
+            await loadProfileUser()
             await loadBehaviorScore()
         }
+    }
+
+    private var displayUser: BadUpUser? {
+        profileUser ?? user
     }
 
     private var scoreText: String {
@@ -2112,7 +2250,7 @@ private struct MoreView: View {
     }
 
     private var formattedCreatedAt: String {
-        guard let createdAt = user?.createdAt, !createdAt.isEmpty else {
+        guard let createdAt = displayUser?.createdAt, !createdAt.isEmpty else {
             return "-"
         }
         if createdAt.count >= 10 {
@@ -2122,7 +2260,7 @@ private struct MoreView: View {
     }
 
     private var platformDisplayName: String {
-        guard let platform = user?.platform?.lowercased(), !platform.isEmpty else {
+        guard let platform = displayUser?.platform?.lowercased(), !platform.isEmpty else {
             return "-"
         }
         if platform.contains("wechat") || platform.contains("weixin") || platform.contains("mini") || platform.contains("wx") {
@@ -2134,7 +2272,7 @@ private struct MoreView: View {
         if platform.contains("ios") {
             return "iOS App"
         }
-        return user?.platform ?? "-"
+        return displayUser?.platform ?? "-"
     }
 
     private var currentAppVersion: String {
@@ -2146,13 +2284,30 @@ private struct MoreView: View {
         isShowingCopyConfirmation = true
     }
 
+    private func loadProfileUser() async {
+        guard let userId = user?.userId else {
+            profileUser = nil
+            return
+        }
+        guard let subjectUserId else {
+            profileUser = user
+            return
+        }
+        do {
+            profileUser = try await RemoteBehaviorService.shared.fetchUserInfo(userId: userId, subjectUserId: subjectUserId)
+        } catch {
+            profileUser = user
+            scoreLoadError = error.localizedDescription
+        }
+    }
+
     private func loadBehaviorScore() async {
         guard let userId = user?.userId else {
             behaviorScore = 0
             return
         }
         do {
-            let score = try await RemoteBehaviorService.shared.fetchUserBehaviorScore(userId: userId)
+            let score = try await RemoteBehaviorService.shared.fetchUserBehaviorScore(userId: userId, subjectUserId: subjectUserId)
             behaviorScore = score.behaviorScore
             scoreLoadError = nil
         } catch {
@@ -2282,14 +2437,14 @@ private struct CareRelationView: View {
             VStack(spacing: 16) {
                 careCodeCard
                 requestCard
-                relationSection(title: "呵护我的", emptyText: "还没有人呵护你。", mode: .cared, items: viewModel.careAsCared)
-                relationSection(title: "我呵护的", emptyText: "还没有你呵护的人。", mode: .guardian, items: viewModel.careAsGuardian)
+                relationSection(title: "守护我的", emptyText: "还没有人守护你。", mode: .cared, items: viewModel.careAsCared)
+                relationSection(title: "我守护的", emptyText: "还没有你守护的人。", mode: .guardian, items: viewModel.careAsGuardian)
             }
             .padding()
             .foregroundStyle(CareTheme.ink)
         }
         .background(CareTheme.page)
-        .navigationTitle("呵护关系")
+        .navigationTitle("守护关系")
         .navigationBarTitleDisplayMode(.inline)
         .overlay {
             if viewModel.isLoading && viewModel.careAsGuardian.isEmpty && viewModel.careAsCared.isEmpty {
@@ -2314,7 +2469,7 @@ private struct CareRelationView: View {
         .alert("已复制", isPresented: $copiedCareCode) {
             Button("知道了", role: .cancel) {}
         } message: {
-            Text("呵护码已复制")
+            Text("守护码已复制")
         }
         .alert(
             "提示",
@@ -2334,7 +2489,7 @@ private struct CareRelationView: View {
             Text(viewModel.errorMessage ?? "")
         }
         .alert(
-            "删除呵护关系",
+            "删除守护关系",
             isPresented: Binding(
                 get: { relationPendingDeletion != nil },
                 set: { isPresented in
@@ -2353,11 +2508,11 @@ private struct CareRelationView: View {
                 }
             }
         } message: {
-            Text("只删除这条呵护关系，不会删除习惯和记录；如果双方互相呵护，另一条反向关系不会受影响。")
+            Text("只删除这条守护关系，不会删除习惯和记录；如果双方互相守护，另一条反向关系不会受影响。")
         }
         .sheet(item: $remarkEditor) { editor in
             CareTextEditSheet(
-                title: "呵护备注",
+                title: "守护备注",
                 placeholder: "输入备注名称",
                 initialText: editor.text,
                 requiresText: false,
@@ -2398,7 +2553,7 @@ private struct CareRelationView: View {
         } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Text("我的呵护码：")
+                    Text("我的守护码：")
                         .font(.title3.weight(.heavy))
                     Text(user?.careCode ?? "-")
                         .font(.system(size: 30, weight: .heavy, design: .monospaced))
@@ -2410,7 +2565,7 @@ private struct CareRelationView: View {
                     Spacer()
                 }
 
-                Text("只把呵护码给信任的人，对方才能请求呵护你。")
+                Text("只把守护码给信任的人，对方才能请求守护你。")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(CareTheme.muted)
             }
@@ -2425,10 +2580,10 @@ private struct CareRelationView: View {
 
     private var requestCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("请求对方呵护我")
+            Text("请求对方守护我")
                 .font(.headline)
 
-            TextField("输入对方 6 位呵护码", text: $careCodeInput)
+            TextField("输入对方 6 位守护码", text: $careCodeInput)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .font(.headline.monospaced())
@@ -2440,7 +2595,7 @@ private struct CareRelationView: View {
                     careCodeInput = String(newValue.uppercased().prefix(6))
                 }
 
-            Text("呵护权限")
+            Text("守护权限")
                 .font(.subheadline.weight(.bold))
 
             VStack(spacing: 12) {
@@ -2457,7 +2612,7 @@ private struct CareRelationView: View {
             Button {
                 requestCare()
             } label: {
-                Text("请求呵护")
+                Text("请求守护")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -2517,7 +2672,7 @@ private struct CareRelationView: View {
 
     private func copyCareCode() {
         guard let code = user?.careCode, !code.isEmpty else {
-            viewModel.errorMessage = "呵护码暂不可用，请重新打开 App"
+            viewModel.errorMessage = "守护码暂不可用，请重新打开 App"
             return
         }
         UIPasteboard.general.string = code
@@ -2531,7 +2686,7 @@ private struct CareRelationView: View {
         }
         let code = careCodeInput.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard code.range(of: #"^[0-9A-Z]{6}$"#, options: .regularExpression) != nil else {
-            viewModel.errorMessage = "请输入 6 位呵护码"
+            viewModel.errorMessage = "请输入 6 位守护码"
             return
         }
         Task {
@@ -2808,9 +2963,9 @@ private struct CarePermissionEditorState: Identifiable {
     var title: String {
         switch mode {
         case .update:
-            return "修改呵护权限"
+            return "修改守护权限"
         case .rerequest:
-            return "再次请求呵护"
+            return "再次请求守护"
         }
     }
 
@@ -2884,7 +3039,7 @@ private struct CarePermissionEditSheet: View {
     let onSave: (CarePermission) -> Void
 
     init(
-        title: String = "修改呵护权限",
+        title: String = "修改守护权限",
         saveTitle: String = "保存",
         selectedPermission: CarePermission,
         onCancel: @escaping () -> Void,
@@ -3430,6 +3585,8 @@ private struct LeafShape: Shape {
 private struct BehaviorKindPickerView: View {
     @Binding var selectedKind: BehaviorKind
     let isEditable: Bool
+    let scoreUnitForKind: (BehaviorKind) -> Int
+    let onSelect: (BehaviorKind) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -3437,9 +3594,10 @@ private struct BehaviorKindPickerView: View {
                 BehaviorKindOptionButton(
                     kind: kind,
                     isSelected: kind == selectedKind,
-                    isEditable: isEditable
+                    isEditable: isEditable,
+                    subtitle: kind.subtitle(scoreUnit: scoreUnitForKind(kind))
                 ) {
-                    selectedKind = kind
+                    onSelect(kind)
                 }
             }
         }
@@ -3450,6 +3608,7 @@ private struct BehaviorKindOptionButton: View {
     let kind: BehaviorKind
     let isSelected: Bool
     let isEditable: Bool
+    let subtitle: String
     let action: () -> Void
 
     var body: some View {
@@ -3457,7 +3616,7 @@ private struct BehaviorKindOptionButton: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(kind.title)
                     .font(.headline)
-                Text(kind.subtitle)
+                Text(subtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(isSelected ? kind.tintColor : Color.secondary)
             }
@@ -3511,8 +3670,13 @@ private struct AddBehaviorView: View {
     @State private var name = ""
     @State private var detail = ""
     @State private var selectedBehaviorKind: BehaviorKind = .good
+    @State private var selectedScoreUnit = BehaviorKind.good.defaultScoreUnit
+    @State private var goodScoreUnit = BehaviorKind.good.defaultScoreUnit
+    @State private var badScoreUnit = BehaviorKind.bad.defaultScoreUnit
     @State private var selectedColor: BehaviorColorOption = .coral
     @State private var selectedPaletteHex: String?
+    @State private var scorePickerKind: BehaviorKind = .good
+    @State private var isShowingScorePicker = false
     @State private var isShowingMoreColors = false
     @State private var isSaving = false
 
@@ -3538,7 +3702,13 @@ private struct AddBehaviorView: View {
 
         _name = State(initialValue: editingBehavior?.name ?? "")
         _detail = State(initialValue: editingBehavior?.detail ?? "")
-        _selectedBehaviorKind = State(initialValue: editingBehavior?.behaviorKind ?? .good)
+        let initialKind = editingBehavior?.behaviorKind ?? .good
+        let initialScoreUnit = editingBehavior?.scoreUnit ?? initialKind.defaultScoreUnit
+        _selectedBehaviorKind = State(initialValue: initialKind)
+        _selectedScoreUnit = State(initialValue: initialKind.normalizedScoreUnit(initialScoreUnit))
+        _goodScoreUnit = State(initialValue: initialKind == .good ? initialKind.normalizedScoreUnit(initialScoreUnit) : BehaviorKind.good.defaultScoreUnit)
+        _badScoreUnit = State(initialValue: initialKind == .bad ? initialKind.normalizedScoreUnit(initialScoreUnit) : BehaviorKind.bad.defaultScoreUnit)
+        _scorePickerKind = State(initialValue: initialKind)
 
         if let editingBehavior {
             if let defaultColor = BehaviorColorOption(rawValue: editingBehavior.colorHex) {
@@ -3619,7 +3789,8 @@ private struct AddBehaviorView: View {
                                     name: name,
                                     detail: detail,
                                     colorHex: selectedColorHex,
-                                    behaviorKind: selectedBehaviorKind
+                                    behaviorKind: selectedBehaviorKind,
+                                    scoreUnit: selectedScoreUnit
                                 )
                             }
 
@@ -3652,7 +3823,50 @@ private struct AddBehaviorView: View {
             .sheet(isPresented: $isShowingMoreColors) {
                 MoreColorsView(selectedHex: $selectedPaletteHex)
             }
+            .confirmationDialog(scorePickerTitle, isPresented: $isShowingScorePicker, titleVisibility: .visible) {
+                ForEach(scorePickerKind.scoreOptions, id: \.self) { score in
+                    Button("\(BehaviorKind.scoreText(score)) 分") {
+                        applyScoreUnit(score, for: scorePickerKind)
+                    }
+                }
+                Button("取消", role: .cancel) {}
+            } message: {
+                Text(scorePickerMessage)
+            }
         }
+    }
+
+    private var scorePickerTitle: String {
+        scorePickerKind == .good ? "选择好习惯分数" : "选择坏习惯分数"
+    }
+
+    private var scorePickerMessage: String {
+        scorePickerKind == .good ? "好习惯记录一次会增加对应分数" : "坏习惯记录一次会扣除对应分数"
+    }
+
+    private func scoreUnit(for kind: BehaviorKind) -> Int {
+        kind == .good ? goodScoreUnit : badScoreUnit
+    }
+
+    private func selectBehaviorKind(_ kind: BehaviorKind) {
+        guard editingBehavior == nil else {
+            return
+        }
+        selectedBehaviorKind = kind
+        selectedScoreUnit = scoreUnit(for: kind)
+        scorePickerKind = kind
+        isShowingScorePicker = true
+    }
+
+    private func applyScoreUnit(_ score: Int, for kind: BehaviorKind) {
+        let normalizedScore = kind.normalizedScoreUnit(score)
+        if kind == .good {
+            goodScoreUnit = normalizedScore
+        } else {
+            badScoreUnit = normalizedScore
+        }
+        selectedBehaviorKind = kind
+        selectedScoreUnit = normalizedScore
     }
 
     private var basicInfoSection: some View {
@@ -3675,10 +3889,12 @@ private struct AddBehaviorView: View {
     }
 
     private var behaviorKindSection: some View {
-        AddBehaviorFormSection(editingBehavior == nil ? "习惯类型" : "习惯类型（编辑时不可修改）") {
+        AddBehaviorFormSection(editingBehavior == nil ? "习惯类型" : "习惯类型（类型和分值不可修改）") {
             BehaviorKindPickerView(
                 selectedKind: $selectedBehaviorKind,
-                isEditable: editingBehavior == nil
+                isEditable: editingBehavior == nil,
+                scoreUnitForKind: scoreUnit(for:),
+                onSelect: selectBehaviorKind
             )
             .padding(12)
         }
@@ -4460,7 +4676,7 @@ private struct HourRecordsSheet: View {
                                 HourRecordRow(
                                     behavior: behavior,
                                     record: record,
-                                    canDelete: canDelete,
+                                    canDelete: canDelete && record.canDelete,
                                     onDelete: {
                                         recordPendingDeletion = record
                                     }
@@ -4472,7 +4688,7 @@ private struct HourRecordsSheet: View {
                     }
                 }
             }
-            .navigationTitle("\(summary.hourText) 的记录")
+            .navigationTitle(summary.hourRangeRecordTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -4530,11 +4746,28 @@ private struct HourRecordRow: View {
                     .font(.headline)
                     .foregroundStyle(.primary)
 
-                Text("\(behavior.name) · \(record.countText) · \(record.scoreText)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 5) {
+                    Text(behavior.name)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if record.showOperatorNote && !record.operatorRecordText.isEmpty {
+                        Text("·")
+                            .foregroundStyle(.secondary)
+                        Text(record.operatorRecordText)
+                            .foregroundStyle(Color(red: 0.96, green: 0.37, blue: 0.32))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+
+                    Text("·")
+                        .foregroundStyle(.secondary)
+                    Text(record.scoreText)
+                        .foregroundStyle(record.scoreColor)
+                }
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.tail)
             }
 
             Spacer()

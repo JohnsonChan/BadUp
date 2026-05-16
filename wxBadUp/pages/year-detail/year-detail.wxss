@@ -59,7 +59,6 @@ page {
   align-items: baseline;
   justify-content: center;
   flex-wrap: wrap;
-  column-gap: 8rpx;
   line-height: 1.35;
   word-break: break-all;
 }
@@ -73,6 +72,7 @@ page {
   align-items: baseline;
   flex-shrink: 0;
   white-space: nowrap;
+  margin-left: 8rpx;
 }
 
 .total-count-num {

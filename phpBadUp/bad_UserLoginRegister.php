@@ -112,16 +112,16 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
     $platform = trim((string)$platform);
 
     $defaults = [
-            ['运动', '身体舒展了，心情自然就顺了', '#43C77A', 1, 10],
-            ['学习', '悄悄努力，静待自己慢慢蜕变', '#31B3C5', 1, 20],
-            ['熬夜', '放下执念早睡，也是一种通透', '#6C7EF7', -1, 30]
+            ['运动', '身体舒展了，心情自然就顺了', '#43C77A', 1, 1, 10],
+            ['学习', '悄悄努力，静待自己慢慢蜕变', '#31B3C5', 1, 1, 20],
+            ['熬夜', '放下执念早睡，也是一种通透', '#6C7EF7', -1, -2, 30]
         ];
 
     $insert = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, creatorUserId, subjectUserId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, createdAt)
+        (userId, creatorUserId, subjectUserId, behaviorName, behaviorDesc, colorHex, behaviorType, scoreUnit, sortOrder, createdAt)
         VALUES
-        (:userId, :creatorUserId, :subjectUserId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :createdAt)
+        (:userId, :creatorUserId, :subjectUserId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :scoreUnit, :sortOrder, :createdAt)
     ");
 
     foreach ($defaults as $item) {
@@ -133,7 +133,8 @@ function badEnsureDefaultBehaviors($pdo, $userId, $platform) {
             ':behaviorDesc' => $item[1],
             ':colorHex' => $item[2],
             ':behaviorType' => badNormalizeBehaviorType($item[3]),
-            ':sortOrder' => $item[4],
+            ':scoreUnit' => badNormalizeScoreUnit($item[4], $item[3]),
+            ':sortOrder' => $item[5],
             ':createdAt' => $createdAt
         ]);
     }

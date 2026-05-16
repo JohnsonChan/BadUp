@@ -24,11 +24,17 @@ try {
         $sortOrder = intval($sortQuery->fetchColumn());
     }
 
+    // scoreUnit 按习惯类型校验，避免客户端传入越界分值。
+    $behaviorType = isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : 1;
+    $scoreUnit = isset($data['scoreUnit'])
+        ? badNormalizeScoreUnit($data['scoreUnit'], $behaviorType)
+        : badScoreUnitByBehaviorType($behaviorType);
+
     $stmt = $pdo->prepare("
         INSERT INTO bad_Behavior
-        (userId, creatorUserId, subjectUserId, behaviorName, behaviorDesc, colorHex, behaviorType, sortOrder, createdAt)
+        (userId, creatorUserId, subjectUserId, behaviorName, behaviorDesc, colorHex, behaviorType, scoreUnit, sortOrder, createdAt)
         VALUES
-        (:userId, :creatorUserId, :subjectUserId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :sortOrder, :createdAt)
+        (:userId, :creatorUserId, :subjectUserId, :behaviorName, :behaviorDesc, :colorHex, :behaviorType, :scoreUnit, :sortOrder, :createdAt)
     ");
     $stmt->execute([
         ':userId' => $subjectUserId,
@@ -37,7 +43,8 @@ try {
         ':behaviorName' => trim($data['behaviorName']),
         ':behaviorDesc' => isset($data['behaviorDesc']) ? trim($data['behaviorDesc']) : '',
         ':colorHex' => trim($data['colorHex']),
-        ':behaviorType' => isset($data['behaviorType']) ? badNormalizeBehaviorType($data['behaviorType']) : 1,
+        ':behaviorType' => $behaviorType,
+        ':scoreUnit' => $scoreUnit,
         ':sortOrder' => $sortOrder,
         ':createdAt' => $createdAt
     ]);
