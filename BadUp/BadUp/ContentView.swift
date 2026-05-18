@@ -8,6 +8,7 @@
 import SwiftUI
 import Combine
 import UIKit
+import WebKit
 
 // 更丰富的颜色板项。
 // 这些颜色会在“更多颜色”弹层中展示。
@@ -1286,6 +1287,9 @@ struct ContentView: View {
     @State private var behaviorPendingDeletion: BehaviorItem?
     @State private var behaviorPendingDeleteConfirmation: BehaviorItem?
     @State private var behaviorPendingEditing: BehaviorItem?
+    @AppStorage("badup.legal.agreement.choice") private var legalAgreementChoice: String = ""
+    @State private var isShowingLegalAgreementPrompt = false
+    @State private var selectedLegalDocument: LegalDocument?
 
     private var currentUserId: Int? {
         session.user?.userId
@@ -1356,6 +1360,35 @@ struct ContentView: View {
         // 背景可以铺到安全区外，但内容不能忽略安全区，否则会顶到导航栏下面。
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.white.opacity(0.001).ignoresSafeArea())
+        .overlay {
+            if isShowingLegalAgreementPrompt {
+                LegalAgreementPromptView(
+                    onOpenPrivacy: {
+                        selectedLegalDocument = .privacy
+                    },
+                    onOpenAgreement: {
+                        selectedLegalDocument = .agreement
+                    },
+                    onDecline: declineLegalAgreement,
+                    onAccept: acceptLegalAgreement
+                )
+            }
+        }
+        .sheet(item: $selectedLegalDocument) { document in
+            NavigationStack {
+                LegalWebView(title: document.title, url: document.url)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("关闭") {
+                                selectedLegalDocument = nil
+                            }
+                        }
+                    }
+            }
+        }
+        .onAppear {
+            showLegalAgreementIfNeeded()
+        }
     }
 
     @ViewBuilder
@@ -1466,6 +1499,23 @@ struct ContentView: View {
         Task {
             await viewModel.loadAll(userId: currentUserId, subjectUserId: activeSubjectUserId)
         }
+    }
+
+    private func showLegalAgreementIfNeeded() {
+        guard !isSubjectMode, legalAgreementChoice.isEmpty else {
+            return
+        }
+        isShowingLegalAgreementPrompt = true
+    }
+
+    private func acceptLegalAgreement() {
+        legalAgreementChoice = "accepted"
+        isShowingLegalAgreementPrompt = false
+    }
+
+    private func declineLegalAgreement() {
+        legalAgreementChoice = "declined"
+        isShowingLegalAgreementPrompt = false
     }
 }
 
@@ -2153,8 +2203,10 @@ private struct MoreView: View {
     @State private var isShowingCopyConfirmation = false
 
     private let contactText = "BooTry"
-    private let icpText = "粤ICP备19008987号-1"
+    private let icpText = "粤ICP备19008987号-2X"
     private let beianURL = URL(string: "https://beian.miit.gov.cn/")!
+    private let privacyPolicyURL = URL(string: "https://55shouzhuan.com/phpBadUp/privacy-policy.html")!
+    private let userAgreementURL = URL(string: "https://55shouzhuan.com/phpBadUp/user-agreement.html")!
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2191,6 +2243,26 @@ private struct MoreView: View {
                     .buttonStyle(.plain)
                 }
             }
+
+            HStack(spacing: 18) {
+                NavigationLink {
+                    LegalWebView(title: "隐私政策", url: privacyPolicyURL)
+                } label: {
+                    Text("《隐私政策》")
+                }
+
+                NavigationLink {
+                    LegalWebView(title: "用户协议", url: userAgreementURL)
+                } label: {
+                    Text("《用户协议》")
+                }
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.blue)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+            .frame(maxWidth: .infinity)
+            .background(Color(uiColor: .systemGroupedBackground))
 
             Button {
                 openURL(beianURL)
@@ -3121,6 +3193,134 @@ private struct InfoRow: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+// 隐私政策和用户协议的统一配置。
+private enum LegalDocument: String, Identifiable {
+    case privacy
+    case agreement
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .privacy:
+            return "隐私政策"
+        case .agreement:
+            return "用户协议"
+        }
+    }
+
+    var url: URL {
+        switch self {
+        case .privacy:
+            return URL(string: "https://55shouzhuan.com/phpBadUp/privacy-policy.html")!
+        case .agreement:
+            return URL(string: "https://55shouzhuan.com/phpBadUp/user-agreement.html")!
+        }
+    }
+}
+
+// 首次进入首页时的协议确认弹窗。
+// 与小程序保持一致：同意和不同意都会记录选择，后续不再重复打扰。
+private struct LegalAgreementPromptView: View {
+    let onOpenPrivacy: () -> Void
+    let onOpenAgreement: () -> Void
+    let onDecline: () -> Void
+    let onAccept: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.36)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                Text("协议与隐私政策")
+                    .font(.title3.weight(.heavy))
+                    .foregroundStyle(Color(red: 0.08, green: 0.15, blue: 0.14))
+
+                VStack(spacing: 4) {
+                    Text("欢迎来到芽记-日常打卡次数！这是我们的")
+                    HStack(spacing: 0) {
+                        Button("《隐私政策》", action: onOpenPrivacy)
+                            .fontWeight(.heavy)
+                        Text("和")
+                        Button("《用户协议》", action: onOpenAgreement)
+                            .fontWeight(.heavy)
+                        Text("，")
+                    }
+                    Text("请您认真阅读。")
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+                HStack(spacing: 14) {
+                    Button(action: onDecline) {
+                        Text("不同意")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Color(uiColor: .secondarySystemBackground))
+                            .foregroundStyle(.secondary)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+
+                    Button(action: onAccept) {
+                        Text("同意")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Color(red: 0.08, green: 0.29, blue: 0.24))
+                            .foregroundStyle(.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(26)
+            .frame(maxWidth: 340)
+            .background(Color(uiColor: .systemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .shadow(color: Color.black.opacity(0.16), radius: 24, x: 0, y: 14)
+            .padding(.horizontal, 28)
+        }
+        .zIndex(1000)
+    }
+}
+
+// App 内网页页。
+// 隐私政策和用户协议用它承载，避免跳出 App 造成上下文丢失。
+private struct LegalWebView: View {
+    let title: String
+    let url: URL
+
+    var body: some View {
+        WebPageView(url: url)
+            .ignoresSafeArea(edges: .bottom)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// SwiftUI 对 WKWebView 的轻量封装。
+// 只负责加载指定 URL，不承载业务状态。
+private struct WebPageView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = WKWebView(frame: .zero)
+        webView.allowsBackForwardNavigationGestures = true
+        webView.load(URLRequest(url: url))
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        guard webView.url != url else {
+            return
+        }
+        webView.load(URLRequest(url: url))
     }
 }
 
