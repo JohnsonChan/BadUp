@@ -145,15 +145,17 @@
         <view class="dialog-message profile-message">
           <text class="dialog-line">{{profileUseWechatNickname ? '填写昵称或使用微信昵称' : '请手动输入昵称'}}</text>
         </view>
-        <view class="profile-form">
-          <view class="profile-field-label">{{profileUseWechatNickname ? '微信昵称' : '昵称'}}</view>
-          <input wx:if="{{profileUseWechatNickname}}" class="profile-nickname-input" type="nickname" value="{{profileNickName}}" placeholder="点击选择或输入昵称" bindinput="onProfileNicknameInput" />
-          <input wx:else class="profile-nickname-input" type="text" value="{{profileNickName}}" placeholder="请输入昵称" bindinput="onProfileNicknameInput" />
-        </view>
-        <view class="dialog-actions">
-          <button class="dialog-btn ghost" bindtap="closeProfilePrompt">暂不设置</button>
-          <button class="dialog-btn main profile-confirm-btn" loading="{{profileSubmitting}}" bindtap="saveWechatProfile">保存资料</button>
-        </view>
+        <form bindsubmit="saveWechatProfile">
+          <view class="profile-form">
+            <view class="profile-field-label">{{profileUseWechatNickname ? '微信昵称' : '昵称'}}</view>
+            <input wx:if="{{profileUseWechatNickname}}" name="profileNickName" class="profile-nickname-input" type="nickname" value="{{profileNickName}}" placeholder="点击选择或输入昵称" bindinput="onProfileNicknameInput" bindblur="onProfileNicknameInput" bindconfirm="onProfileNicknameInput" />
+            <input wx:else name="profileNickName" class="profile-nickname-input" type="text" value="{{profileNickName}}" placeholder="请输入昵称" bindinput="onProfileNicknameInput" bindblur="onProfileNicknameInput" bindconfirm="onProfileNicknameInput" />
+          </view>
+          <view class="dialog-actions">
+            <button class="dialog-btn ghost" bindtap="closeProfilePrompt">暂不设置</button>
+            <button class="dialog-btn main profile-confirm-btn" loading="{{profileSubmitting}}" form-type="submit">保存资料</button>
+          </view>
+        </form>
       </view>
     </view>
   </block>

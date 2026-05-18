@@ -269,19 +269,26 @@ Page({
     })
   },
 
-  saveWechatProfile() {
+  saveWechatProfile(event) {
     const user = this.data.user
     if (!user || !user.userId || this.data.profileSubmitting) {
       return
     }
 
-    const userName = String(this.data.profileNickName || '').trim()
+    // Redmi 10A 这类旧 Android WebView 上，type="nickname" 可能只更新表单值，
+    // 不一定及时触发 bindinput，所以提交时优先读取 form value。
+    const formValue = event && event.detail && event.detail.value
+    const submittedName = formValue && formValue.profileNickName
+    const userName = String(submittedName || this.data.profileNickName || '').trim()
     if (!userName) {
       wx.showToast({ title: '请填写微信昵称', icon: 'none' })
       return
     }
 
-    this.setData({ profileSubmitting: true })
+    this.setData({
+      profileSubmitting: true,
+      profileNickName: userName,
+    })
 
     api.updateUserProfile(user.userId, userName, '')
       .then((updatedUser) => {

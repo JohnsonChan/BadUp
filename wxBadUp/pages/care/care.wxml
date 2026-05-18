@@ -66,11 +66,11 @@
           </view>
           <view class="relation-side">
             <block wx:if="{{item.status === 1}}">
-              <button wx:if="{{item.canUpdatePermission}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openPermissionModal">改权限</button>
-              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="守护备注" bindtap="openRemarkModal">改备注</button>
+              <button wx:if="{{item.canUpdatePermission}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" catchtouchend="openPermissionModal" catchtap="openPermissionModal">改权限</button>
+              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="守护备注" catchtouchend="openRemarkModal" catchtap="openRemarkModal">改备注</button>
             </block>
-            <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openRerequestModal">再请求</button>
-            <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" bindtap="confirmDeleteCare">删除</button>
+            <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" catchtouchend="openRerequestModal" catchtap="openRerequestModal">再请求</button>
+            <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" catchtap="confirmDeleteCare">删除</button>
           </view>
         </view>
       </view>
@@ -104,63 +104,69 @@
           <view class="relation-side">
             <block wx:if="{{item.canRespond}}">
               <view class="request-actions">
-                <button class="small-btn ghost" data-id="{{item.careId}}" bindtap="openRejectModal">拒绝</button>
-                <button class="small-btn" data-id="{{item.careId}}" bindtap="acceptCare">同意</button>
+                <button class="small-btn ghost" data-id="{{item.careId}}" catchtouchend="openRejectModal" catchtap="openRejectModal">拒绝</button>
+                <button class="small-btn" data-id="{{item.careId}}" catchtap="acceptCare">同意</button>
               </view>
             </block>
             <block wx:elif="{{item.status === 1}}">
-              <button class="text-btn" data-userid="{{item.caredUserId}}" data-name="{{item.displayName}}" data-permission="{{item.permissionLevel}}" bindtap="openCaredHome">查看/管理</button>
-              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="守护备注" bindtap="openRemarkModal">改备注</button>
+              <button class="text-btn" data-userid="{{item.caredUserId}}" data-name="{{item.displayName}}" data-permission="{{item.permissionLevel}}" catchtap="openCaredHome">查看/管理</button>
+              <button class="text-btn" data-id="{{item.careId}}" data-value="{{item.remark}}" data-title="守护备注" catchtouchend="openRemarkModal" catchtap="openRemarkModal">改备注</button>
             </block>
-            <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" bindtap="openRerequestModal">再请求</button>
-            <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" bindtap="confirmDeleteCare">删除</button>
+            <button wx:if="{{item.canRerequest}}" class="text-btn" data-id="{{item.careId}}" data-permission="{{item.permissionLevel}}" catchtouchend="openRerequestModal" catchtap="openRerequestModal">再请求</button>
+            <button wx:if="{{item.canDelete}}" class="text-btn danger-text-btn" data-id="{{item.careId}}" catchtap="confirmDeleteCare">删除</button>
           </view>
         </view>
       </view>
     </view>
   </scroll-view>
 
-  <view wx:if="{{remarkModal}}" class="dialog-mask">
-    <view class="dialog-card">
-      <view class="dialog-title">{{remarkModal.title}}</view>
-      <input class="remark-input" value="{{remarkModal.value}}" placeholder="输入备注名称" bindinput="onRemarkInput" />
-      <view class="dialog-actions">
-        <button class="dialog-btn ghost" bindtap="closeRemarkModal">取消</button>
-        <button class="dialog-btn main" bindtap="saveRemark">保存</button>
-      </view>
-    </view>
-  </view>
-
-  <view wx:if="{{rejectModal}}" class="dialog-mask">
-    <view class="dialog-card">
-      <view class="dialog-title">拒绝原因</view>
-      <textarea class="reason-input" value="{{rejectModal.value}}" placeholder="请填写拒绝原因，会同步给对方看到" maxlength="120" bindinput="onRejectReasonInput"></textarea>
-      <view class="dialog-actions">
-        <button class="dialog-btn ghost" bindtap="closeRejectModal">取消</button>
-        <button class="dialog-btn danger" bindtap="saveReject">确认拒绝</button>
-      </view>
-    </view>
-  </view>
-
-  <view wx:if="{{permissionModal}}" class="dialog-mask">
-    <view class="dialog-card">
-      <view class="dialog-title">{{permissionModal.title}}</view>
-      <view class="permission-grid modal-permission-grid">
-        <view
-          wx:for="{{permissions}}"
-          wx:key="value"
-          class="permission-card {{index == 0 ? '' : 'permission-card-spaced'}} {{permissionModal.value === item.value ? 'selected' : ''}}"
-          data-value="{{item.value}}"
-          bindtap="selectModalPermission"
-        >
-          <view class="permission-name">{{item.name}}</view>
-          <view class="permission-desc">{{item.desc}}</view>
+  <root-portal wx:if="{{remarkModal}}">
+    <view class="dialog-mask">
+      <view class="dialog-card">
+        <view class="dialog-title">{{remarkModal.title}}</view>
+        <input class="remark-input" value="{{remarkModal.value}}" placeholder="输入备注名称" bindinput="onRemarkInput" />
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" catchtap="closeRemarkModal">取消</button>
+          <button class="dialog-btn main" catchtap="saveRemark">保存</button>
         </view>
       </view>
-      <view class="dialog-actions">
-        <button class="dialog-btn ghost" bindtap="closePermissionModal">取消</button>
-        <button class="dialog-btn main" bindtap="savePermission">{{permissionModal.saveText}}</button>
+    </view>
+  </root-portal>
+
+  <root-portal wx:if="{{rejectModal}}">
+    <view class="dialog-mask">
+      <view class="dialog-card">
+        <view class="dialog-title">拒绝原因</view>
+        <textarea class="reason-input" value="{{rejectModal.value}}" placeholder="请填写拒绝原因，会同步给对方看到" maxlength="120" bindinput="onRejectReasonInput"></textarea>
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" catchtap="closeRejectModal">取消</button>
+          <button class="dialog-btn danger" catchtap="saveReject">确认拒绝</button>
+        </view>
       </view>
     </view>
-  </view>
+  </root-portal>
+
+  <root-portal wx:if="{{permissionModal}}">
+    <view class="dialog-mask">
+      <view class="dialog-card">
+        <view class="dialog-title">{{permissionModal.title}}</view>
+        <view class="permission-grid modal-permission-grid">
+          <view
+            wx:for="{{permissions}}"
+            wx:key="value"
+            class="permission-card {{index == 0 ? '' : 'permission-card-spaced'}} {{permissionModal.value === item.value ? 'selected' : ''}}"
+            data-value="{{item.value}}"
+            catchtap="selectModalPermission"
+          >
+            <view class="permission-name">{{item.name}}</view>
+            <view class="permission-desc">{{item.desc}}</view>
+          </view>
+        </view>
+        <view class="dialog-actions">
+          <button class="dialog-btn ghost" catchtap="closePermissionModal">取消</button>
+          <button class="dialog-btn main" catchtap="savePermission">{{permissionModal.saveText}}</button>
+        </view>
+      </view>
+    </view>
+  </root-portal>
 </view>

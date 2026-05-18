@@ -2,7 +2,7 @@
 // iOS App 和小程序共用同一套 PHP 接口，方便后续维护数据一致性。
 
 const baseURL = 'https://55shouzhuan.com/phpBadUp/'
-const appVersion = '1.0.8'
+const appVersion = '1.1.0'
 
 // 统一的 POST 请求入口：
 // 1. 发起请求
